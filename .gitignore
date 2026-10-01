@@ -1,0 +1,2 @@
+/prometheus/targets/*
+!/prometheus/targets/template.yml

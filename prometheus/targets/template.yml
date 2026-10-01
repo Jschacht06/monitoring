@@ -1,0 +1,36 @@
+# Template for target files.
+#
+# Copy this file to a new name (e.g. group-a.yml), uncomment one block,
+# and fill in the real values. Do NOT use this template.yml directly as a
+# live target list — its blocks are commented out on purpose.
+#
+# One block per (module, host/service). Add targets to a block, or copy a block.
+#
+# Available modules are defined in blackbox/blackbox.yml:
+#   http_2xx, tcp_connect, icmp
+
+# HTTP(s) health check — expects a 2xx response.
+# - targets:
+#     - http://<host>:<port>/<path>
+#   labels:
+#     module: http_2xx
+#     group: <group-name>
+#     service: <service-name>
+#     host: <host-name-or-ip>
+
+# Example for a host without a web interface (uncomment and fill in):
+# - targets:
+#     - 192.168.1.144:22
+#   labels:
+#     module: tcp_connect
+#     group: group-a
+#     service: ssh
+#     host: 192.168.1.144
+#
+# - targets:
+#     - 192.168.1.144
+#   labels:
+#     module: icmp
+#     group: group-a
+#     service: ping
+#     host: 192.168.1.144
