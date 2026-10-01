@@ -1,0 +1,12 @@
+groups:
+  - name: availability
+    rules:
+      - alert: ServiceDown
+        expr: probe_success == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} on {{ $labels.host }} is unreachable"
+          description: "Probe {{ $labels.module }} to {{ $labels.instance }} has failed for more than 2 minutes (group: {{ $labels.group }})."
+          runbook: "ServiceDown: 1) check the host is up, 2) check the service process is running, 3) check the network path from noc-core, 4) contact the owning group."
