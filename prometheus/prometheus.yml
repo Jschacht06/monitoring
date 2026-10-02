@@ -13,7 +13,12 @@ scrape_configs:
     static_configs:
       - targets:
           - localhost:9090
-
+  - job_name: node
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          host: noc-core
+          group: noc
 
   # Probes: do not add targets here. Add them in targets/*.yml
   - job_name: blackbox
