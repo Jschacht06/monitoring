@@ -1,4 +1,5 @@
 groups:
+#blackbox exporter
   - name: availability
     rules:
       - alert: ServiceDown
@@ -20,3 +21,28 @@ groups:
           summary: "{{ $labels.service }} on {{ $labels.host }} is slow"
           description: "Probe {{ $labels.module }} to {{ $labels.instance }} succeeds but is slow: {{ $value | humanizeDuration }} (group: {{ $labels.group }})."
           runbook: "ServiceSlow: 1) check load on the host and the service, 2) check the network path from noc-core, 3) compare with the trend in Grafana, 4) contact the owning group."
+#node exporter
+  - name: capacity
+    rules:
+      - alert: DiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{fstype=~"ext4|xfs|zfs|btrfs"}
+            / node_filesystem_size_bytes{fstype=~"ext4|xfs|zfs|btrfs"} < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space low on {{ $labels.host }} ({{ $labels.mountpoint }})"
+          description: "Only {{ $value | humanizePercentage }} free on {{ $labels.mountpoint }} ({{ $labels.device }})."
+          runbook: "DiskSpaceLow: 1) find what grew (du -xh / | sort -h | tail), 2) clean logs or old data, 3) extend the disk, 4) contact the owning group."
+
+      - alert: DiskWillFillSoon
+        expr: |
+          predict_linear(node_filesystem_avail_bytes{fstype=~"ext4|xfs|zfs|btrfs"}[6h], 24 * 3600) < 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk on {{ $labels.host }} ({{ $labels.mountpoint }}) predicted full within 24h"
+          description: "At the current growth rate {{ $labels.mountpoint }} on {{ $labels.host }} runs out of space within 24 hours."
+          runbook: "DiskWillFillSoon: 1) check recent growth, 2) clean or extend before it fills, 3) contact the owning group."
