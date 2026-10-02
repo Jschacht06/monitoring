@@ -6,6 +6,7 @@ route:
   group_interval: 5m
   repeat_interval: 4h
 
+# Teams
 receivers:
   - name: default
     msteamsv2_configs:
@@ -15,3 +16,16 @@ receivers:
         text: |-
           {{ range .Alerts }}- {{ .Annotations.summary }} ({{ .Labels.module }})
           {{ end }}
+
+# Gmail
+global:
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'noc-alerts@example.com'
+  smtp_auth_username: 'your-smtp-user'
+  smtp_auth_password: 'your-smtp-password'
+
+receivers:
+  - name: default
+    email_configs:
+      - to: 'you@example.com'
+        send_resolved: true

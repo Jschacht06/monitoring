@@ -3,3 +3,5 @@
 
 /alertmanager/*
 !/alertmanager/template.yml
+
+compose.yaml
