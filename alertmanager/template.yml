@@ -29,3 +29,13 @@ receivers:
     email_configs:
       - to: 'you@example.com'
         send_resolved: true
+
+# Inhibit rules to prevent duplicate alerts for the same host/service from different modules (e.g., ICMP and HTTP).
+inhibit_rules:
+  - source_matchers:
+      - alertname="ServiceDown"
+      - module="icmp"
+    target_matchers:
+      - alertname="ServiceDown"
+      - module="http_2xx"
+    equal: [host]
