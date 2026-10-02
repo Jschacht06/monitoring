@@ -46,3 +46,16 @@ groups:
           summary: "Disk on {{ $labels.host }} ({{ $labels.mountpoint }}) predicted full within 24h"
           description: "At the current growth rate {{ $labels.mountpoint }} on {{ $labels.host }} runs out of space within 24 hours."
           runbook: "DiskWillFillSoon: 1) check recent growth, 2) clean or extend before it fills, 3) contact the owning group."
+
+#selfcheck
+  - name: monitoring-health
+    rules:
+      - alert: MonitoringCheckFailed
+        expr: up{job=~"node|blackbox"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Monitoring check '{{ $labels.job }}' is failing ({{ $labels.instance }})"
+          description: "Prometheus cannot scrape job {{ $labels.job }} (instance {{ $labels.instance }}) for more than 2 minutes. Alerts for this target are blind until it is fixed."
+          runbook: "MonitoringCheckFailed: 1) check the exporter container (docker compose ps), 2) check its logs, 3) restart it, 4) verify under Status > Targets in Prometheus."
