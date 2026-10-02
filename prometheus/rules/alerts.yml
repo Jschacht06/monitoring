@@ -10,3 +10,13 @@ groups:
           summary: "{{ $labels.service }} on {{ $labels.host }} is unreachable"
           description: "Probe {{ $labels.module }} to {{ $labels.instance }} has failed for more than 2 minutes (group: {{ $labels.group }})."
           runbook: "ServiceDown: 1) check the host is up, 2) check the service process is running, 3) check the network path from noc-core, 4) contact the owning group."
+
+      - alert: ServiceSlow
+        expr: probe_duration_seconds{module="http_2xx"} > 1 and on(instance, module) probe_success == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} on {{ $labels.host }} is slow"
+          description: "Probe {{ $labels.module }} to {{ $labels.instance }} succeeds but is slow: {{ $value | humanizeDuration }} (group: {{ $labels.group }})."
+          runbook: "ServiceSlow: 1) check load on the host and the service, 2) check the network path from noc-core, 3) compare with the trend in Grafana, 4) contact the owning group."
