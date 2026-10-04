@@ -1,0 +1,246 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Select the existing working Prometheus data source.",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "id": null,
+  "uid": null,
+  "title": "<your dashboard title here>",
+  "description": "<your description here>",
+  "tags": [
+    "<your environment tag here>",
+    "service-catalogue"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 2,
+      "title": "Every monitored service",
+      "description": "Identity is group/service/host. Checks includes failing scrapes. Identical metadata across checks is required to keep one row per service.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count by (group, service, host, owner, contact, dependencies) (up)",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Group",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "group": 0,
+              "service": 1,
+              "host": 2,
+              "owner": 3,
+              "contact": 4,
+              "dependencies": 5,
+              "Value": 6
+            },
+            "renameByName": {
+              "group": "Group",
+              "service": "Service",
+              "host": "Host",
+              "owner": "Owner",
+              "contact": "Contact person",
+              "dependencies": "Dependencies",
+              "Value": "Checks"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "title": "Services with incomplete catalogue metadata",
+      "description": "Number of service instances (group/service/host) with at least one check missing a required catalogue label. Must be zero after all labels are complete. No data or a query error requires investigation.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(count by (group, service, host) (up{group=\"\"} or up{service=\"\"} or up{host=\"\"} or up{owner=\"\"} or up{contact=\"\"} or up{dependencies=\"\"})) or (0 * count(up))",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "none",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Services missing catalogue metadata",
+      "description": "Services with at least one check missing group, service, host, owner, contact or dependencies. One row per group/service/host. Checks missing metadata counts incomplete checks, including failing scrapes.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count by (group, service, host) (up{group=\"\"} or up{service=\"\"} or up{host=\"\"} or up{owner=\"\"} or up{contact=\"\"} or up{dependencies=\"\"})",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Group",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "group": 0,
+              "service": 1,
+              "host": 2,
+              "Value": 3
+            },
+            "renameByName": {
+              "group": "Group",
+              "service": "Service",
+              "host": "Host",
+              "Value": "Checks missing metadata"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

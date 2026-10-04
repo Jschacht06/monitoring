@@ -17,6 +17,9 @@
 #     group: <group-name>
 #     service: <service-name>
 #     host: <host-name-or-ip>
+#     owner: <owner>
+#     contact: <owner@exmaple.com>
+#     dependencies: <dependencies>
 
 # Example for a host without a web interface (uncomment and fill in):
 # - targets:
@@ -26,6 +29,9 @@
 #     group: group-a
 #     service: ssh
 #     host: 192.168.1.144
+#     owner: John Doe
+#     contact: john.doe@gmail.com
+#     dependencies: network switch, firewall
 #
 # - targets:
 #     - 192.168.1.144
@@ -34,3 +40,6 @@
 #     group: group-a
 #     service: ping
 #     host: 192.168.1.144
+#     owner: Mark Smith
+#     contact: mark.smith@outlook.com
+#     dependencies: network interface
