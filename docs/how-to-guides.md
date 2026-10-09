@@ -20,6 +20,20 @@ Contents:
 - [Add node_exporter for another host](#add-node_exporter-for-another-host)
 - [Move the SMTP password into a secret file](#move-the-smtp-password-into-a-secret-file)
 
+Status of the recipes on this setup:
+
+| Recipe | Status |
+|---|---|
+| Change an alert threshold or "for" duration | Tested (test values for `ServiceSlow` and `DiskSpaceLow`) |
+| Add a new alert rule | Structure tested through the existing rules; the certificate example is **untested** |
+| Change routing and timings per severity | Routing by severity tested; the two examples (1 m warning wait, `info` route) are **untested** |
+| Add or change an inhibit rule | ICMP suppresses HTTP: tested. The `MonitoringCheckFailed` rule is **untested** |
+| Silence alerts for maintenance | Tested |
+| Add or change the escalation | Tested, including the resolved email |
+| Add another email receiver or change the recipients | A second recipient is tested; the per-group route is **untested** |
+| Add node_exporter for another host | **Untested** (only noc-core runs node_exporter so far) |
+| Move the SMTP password into a secret file | **Untested** |
+
 ---
 
 ## Change an alert threshold or "for" duration
@@ -79,7 +93,7 @@ Copy this template into `prometheus/rules/alerts.yml`, either into an existing g
           runbook: "<AlertName>: 1) first check, 2) second check, 3) contact the owning group."
 ```
 
-**Example** (not in the repo yet): warn when a TLS certificate expires within 14 days. It uses a metric that HTTPS probes already produce.
+**Example** (not in the repo yet, **untested**): warn when a TLS certificate expires within 14 days. It uses a metric that HTTPS probes already produce.
 
 ```yaml
   - name: certificates
@@ -187,6 +201,8 @@ For a host that normally answers ping, a failing ping means the host or the netw
 
 ### New rule: a down host suppresses MonitoringCheckFailed
 
+> **Untested.** Not tried yet, because only noc-core has a `node` target at the moment. The outputs below are what the config should produce.
+
 When a remote host with node_exporter is powered off, two alerts fire: `ServiceDown` for its ICMP probe, and `MonitoringCheckFailed` because the `node` job can't scrape it. The second is a symptom. Add this entry to the `inhibit_rules:` list:
 
 ```yaml
@@ -258,7 +274,7 @@ A **silence** mutes notifications for alerts that match a set of labels, for a s
 
 What a silence **does**:
 
-- It stops all emails for matching alerts on every route, including escalation. It acts as an "acknowledge": silence a critical alert within 15 minutes and the escalation is never sent.
+- It stops all emails for matching alerts on every route, including escalation. It acts as an "acknowledge": silence a critical alert within 15 minutes and the escalation should never be sent (expected behaviour, not tested).
 - It persists across restarts, because it is stored in the `alertmanager_data` volume.
 - It can be created in advance with a start time, for planned maintenance.
 
@@ -330,7 +346,7 @@ How it works:
 
 1. `continue: true` on the first route makes Alertmanager also check the second route. Without it, matching stops at the first route and the escalation never happens.
 2. The second route starts its own group with a 15-minute `group_wait`. If the alert resolved within those 15 minutes, there is nothing left to send and the escalation stays quiet. If it is still firing, `email-escalation` gets it.
-3. A silence created within the 15 minutes stops the escalation too.
+3. A silence created within the 15 minutes stops the escalation too (expected behaviour, not tested).
 
 The receiver:
 
@@ -395,6 +411,8 @@ Edit `to:` in `alertmanager/alertmanager.yml`. Separate several addresses with c
 
 ### Add a receiver for one group
 
+> **Untested.** Not tried on this setup yet.
+
 Every alert carries the `group` label from its target. To also notify the owning group directly, add a receiver:
 
 ```yaml
@@ -438,6 +456,8 @@ Expected receivers: `email-group-a,email-critical,email-escalation`.
 ## Add node_exporter for another host
 
 Only do this on hosts where you are **allowed** to install software. For everything else, stay with black-box probes.
+
+> **Untested.** Only noc-core runs node_exporter so far. The firewall steps and expected outputs have not been tried on a second host.
 
 ### 1. Run node_exporter on the host
 
@@ -505,6 +525,8 @@ docker compose restart prometheus
 ---
 
 ## Move the SMTP password into a secret file
+
+> **Untested.** Not tried on this setup yet. If Alertmanager cannot read the file, check its owner and mode first.
 
 Instead of `smtp_auth_password` in `alertmanager.yml`, Alertmanager can read the password from a separate file. This keeps the password out of the config: you can show, diff or share `alertmanager.yml` without leaking it, and give the file stricter permissions.
 

@@ -81,21 +81,25 @@ cp compose-template.yaml compose.yaml
 nano compose.yaml
 ```
 
-Change one line in the `alertmanager` service:
+Replace `<your-host>` with your noc-core IP in two places, one in the `prometheus` service and one in the `alertmanager` service:
 
 ```yaml
+      # prometheus service
+      - --web.external-url=http://<noc-core-ip>:9090
+      # alertmanager service
       - --web.external-url=http://<noc-core-ip>:9093
 ```
 
-Why: Alertmanager puts this URL into emails ("View in Alertmanager") and uses it for links in its UI. Without it, the links point to the container's internal hostname and do not work from your browser.
+Why: Alertmanager puts its URL into emails ("View in Alertmanager") and uses it for links in its UI. Prometheus' URL becomes the "Source" link on each alert. Without these two flags, the links point to the container's internal hostname and do not work from your browser.
 
 **Check:**
 
 ```bash
 docker compose config --quiet && echo OK
+grep -n '<your-host>' compose.yaml
 ```
 
-You should see `OK`. A YAML error here (for example `volumes must be a mapping`) usually means a missing colon or wrong indentation. See [operations-and-troubleshooting.md](operations-and-troubleshooting.md#troubleshooting).
+You should see `OK`, and `grep` should print nothing (no placeholder left). A YAML error here (for example `volumes must be a mapping`) usually means a missing colon or wrong indentation. See [operations-and-troubleshooting.md](operations-and-troubleshooting.md#troubleshooting).
 
 ---
 

@@ -158,7 +158,7 @@ All other settings use Blackbox defaults. For example, the HTTP prober does not 
 
 ### Adding a module
 
-Add a module under `modules:`, then restart Blackbox (see [operations](operations-and-troubleshooting.md#how-to-apply-a-change)). Two examples (not in the repo yet):
+Add a module under `modules:`, then restart Blackbox (see [operations](operations-and-troubleshooting.md#how-to-apply-a-change)). Two examples (not in the repo yet, **untested**):
 
 **HTTPS check that requires exactly 200 and a valid certificate:**
 
@@ -360,7 +360,7 @@ The three child routes:
 | 2 | `severity="critical"` | `email-escalation` | 15m | 5m | 4h | – | Same alerts, separate group. The long `group_wait` means the first email only goes out if the alert is **still firing after 15 minutes**. If it resolved earlier, nothing is sent. |
 | 3 | `severity="warning"` | `email-warning` | 2m | 15m | 12h | – | Warnings are not urgent. Wait longer to bundle them and remind only twice a day. |
 
-Alertmanager has no "acknowledge" button. A **silence** acts as acknowledgement: if someone silences the alert within 15 minutes, the escalation never fires.
+Alertmanager has no "acknowledge" button. A **silence** acts as acknowledgement: if someone silences the alert within 15 minutes, the escalation never fires (expected behaviour, not tested).
 
 ### `receivers`
 
@@ -418,7 +418,7 @@ Why: for a host that normally answers ping, a failing ping means the host or the
 
 ## compose.yaml
 
-The repo tracks `compose-template.yaml`. Copy it to `compose.yaml` (ignored by Git) and replace `<your-host>`.
+The repo tracks `compose-template.yaml`. Copy it to `compose.yaml` (ignored by Git) and replace `<your-host>` (twice: in `prometheus` and in `alertmanager`).
 
 ### Pinned versions
 
@@ -445,6 +445,7 @@ Why pinned, not `latest`: a rebuild or a new host gets exactly the versions that
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=45d
       - --storage.tsdb.retention.size=10GB
+      - --web.external-url=http://<your-host>:9090
     volumes:
       - ./prometheus:/etc/prometheus:ro
       - prometheus_data:/prometheus
@@ -455,7 +456,8 @@ Why pinned, not `latest`: a rebuild or a new host gets exactly the versions that
 - `./prometheus:/etc/prometheus:ro`: the **whole folder** is mounted, so `prometheus.yml`, `rules/` and `targets/` are all visible. `:ro` (read-only) means the container cannot change your config.
 - `prometheus_data`: named volume for the time-series database. It survives `docker compose down` and image upgrades.
 - Port `9090` is published for the UI and API.
-- Not set: `--web.external-url` and `--web.enable-lifecycle`. Without the first, the "Source" links on alerts in Alertmanager point to the container's hostname. Without the second, config changes need a restart instead of a reload.
+- `--web.external-url`: the address you use in a browser. Prometheus puts it in the "Source" link of each alert, so the link in Alertmanager and in emails opens the right query. Set `<your-host>` to the noc-core IP. Without it, those links point to the container's hostname.
+- Not set: `--web.enable-lifecycle`. Without it, config changes need a restart (or a `SIGHUP`) instead of an HTTP reload.
 
 ### grafana
 

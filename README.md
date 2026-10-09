@@ -32,8 +32,8 @@ flowchart LR
     bb -- "ping" --> icmp
     prom -- "firing alerts" --> am
 
-    am -- "severity=critical<br/>(30s wait)" --> crit["email-critical<br/>[CRITICAL]"]
-    am -- "severity=critical, still firing<br/>after 15m (continue: true)" --> esc["email-escalation<br/>[ESCALATED]"]
+    am -- "severity=critical<br/>(30s wait, continue: true)" --> crit["email-critical<br/>[CRITICAL]"]
+    am -- "severity=critical, still firing<br/>after 15m" --> esc["email-escalation<br/>[ESCALATED]"]
     am -- "severity=warning<br/>(2m wait)" --> warn["email-warning<br/>[WARNING]"]
     am -- "anything else" --> def["default"]
 ```
@@ -61,6 +61,8 @@ Written but not tested:
 
 - **Alert `DiskWillFillSoon`** (warning): a linear forecast says the disk is full within 24 hours. It needs hours of real disk growth to test, so it has not fired yet.
 
+Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tried on this setup yet are marked **Untested** there.
+
 ### Planned (not built yet)
 
 - Loki for logs
@@ -79,7 +81,7 @@ Full explanation, prerequisites and checks are in [docs/setup.md](docs/setup.md)
 git clone https://github.com/Jschacht06/monitoring.git /opt/monitoring
 cd /opt/monitoring
 cp compose-template.yaml compose.yaml
-nano compose.yaml                      # replace <your-host> with the noc-core IP
+nano compose.yaml                      # replace <your-host> with the noc-core IP (twice)
 cp alertmanager/template.yml alertmanager/alertmanager.yml
 nano alertmanager/alertmanager.yml     # fill in SMTP settings and recipients
 docker compose up -d
@@ -87,6 +89,8 @@ docker compose ps                      # all five services should be "Up"
 ```
 
 Then open Prometheus on `http://<noc-core-ip>:9090`, Grafana on `http://<noc-core-ip>:3000` and Alertmanager on `http://<noc-core-ip>:9093`.
+
+The quick start does not add any probe targets yet. Add your first target file as described in [docs/setup.md](docs/setup.md#5-add-your-first-targets), then see [docs/adding-targets.md](docs/adding-targets.md) for your own services.
 
 ## Repo layout
 
