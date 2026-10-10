@@ -5,3 +5,5 @@
 !/alertmanager/template.yml
 
 compose.yaml
+
+/prometheus/prometheus.yml
