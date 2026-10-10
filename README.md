@@ -55,11 +55,16 @@ Tested end to end:
 - **Maintenance silences** through the Alertmanager UI or `amtool`.
 - **Escalation**: a critical alert that is still firing after 15 minutes also goes to an escalation receiver, and it gets a resolved email too.
 - **Host metrics** for noc-core itself through node_exporter.
+- **Host metrics for the Proxmox host** (node_exporter, Debian package): filesystems including ZFS pools and per-LXC volumes, CPU/NVMe/NIC temperatures and ZFS pool health.
+- **Drive health** through smartctl_exporter (SMART status and drive temperatures of the physical drives).
+- **Alerts for drives, ZFS and temperatures**: `SmartStatusFailed`, `DriveNotReadable`, `ZfsPoolNotOnline` and five temperature alerts (`HostTemperatureHigh`/`Critical`, `NvmeTemperatureHigh`, `DriveTemperatureHigh`/`Critical`). All were tested by flipping their condition, with the firing and resolved emails. `DriveNotReadable` fired for a real faulted drive.
+- **Flip test**: a way to prove an alert end to end without breaking anything, see [docs/how-to-guides.md](docs/how-to-guides.md#test-an-alert-by-flipping-its-condition).
 - **Grafana** with Prometheus as a data source (added by hand).
 
 Written but not tested:
 
 - **Alert `DiskWillFillSoon`** (warning): a linear forecast says the disk is full within 24 hours. It needs hours of real disk growth to test, so it has not fired yet.
+- **Alert `DriveDisappeared`** (critical): a drive that reported SMART data 24 hours ago and does not now. A real test needs a drive to be unplugged.
 
 Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tried on this setup yet are marked **Untested** there.
 
@@ -68,7 +73,6 @@ Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tri
 - Loki for logs
 - Public or internal status page
 - Proxmox API exporter (per-LXC/VM metrics and quotas)
-- smartctl_exporter (disk health)
 - Grafana dashboards as code (provisioning)
 - Backup and restore of Prometheus, Grafana and Alertmanager data
 - Automated deployment with Ansible/Terraform
@@ -82,6 +86,7 @@ git clone https://github.com/Jschacht06/monitoring.git /opt/monitoring
 cd /opt/monitoring
 cp compose-template.yaml compose.yaml
 nano compose.yaml                      # replace <your-host> with the noc-core IP (twice)
+cp prometheus/template.yml prometheus/prometheus.yml
 cp alertmanager/template.yml alertmanager/alertmanager.yml
 nano alertmanager/alertmanager.yml     # fill in SMTP settings and recipients
 docker compose up -d
@@ -90,7 +95,7 @@ docker compose ps                      # all five services should be "Up"
 
 Then open Prometheus on `http://<noc-core-ip>:9090`, Grafana on `http://<noc-core-ip>:3000` and Alertmanager on `http://<noc-core-ip>:9093`.
 
-The quick start does not add any probe targets yet. Add your first target file as described in [docs/setup.md](docs/setup.md#5-add-your-first-targets), then see [docs/adding-targets.md](docs/adding-targets.md) for your own services.
+The quick start does not add any probe targets yet. Add your first target file as described in [docs/setup.md](docs/setup.md#5-create-prometheusyml-and-add-your-first-targets), then see [docs/adding-targets.md](docs/adding-targets.md) for your own services.
 
 ## Repo layout
 
@@ -104,9 +109,10 @@ The quick start does not add any probe targets yet. Add your first target file a
 ├── blackbox/
 │   └── blackbox.yml              # Blackbox Exporter probe modules: http_2xx, tcp_connect, icmp
 ├── prometheus/
-│   ├── prometheus.yml            # Prometheus config: scrape jobs, rule files, Alertmanager address
+│   ├── template.yml              # Prometheus config template; copy to prometheus.yml (ignored by Git) and edit the copy
+│   ├── prometheus.yml            # Your own copy: scrape jobs, rule files, Alertmanager address (ignored by Git, holds host IPs)
 │   ├── rules/
-│   │   └── alerts.yml            # All alert rules (availability, capacity, monitoring-health)
+│   │   └── alerts.yml            # All alert rules (availability, capacity, drives, storage, hardware, monitoring-health)
 │   └── targets/
 │       └── template.yml          # Template for probe target files; real files (*.yml) are ignored by Git
 └── docs/

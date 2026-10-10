@@ -133,13 +133,21 @@ Then replace every `to: 'you@example.com'` under `receivers:` with `<alert-recip
 git status --short
 ```
 
-`alertmanager/alertmanager.yml` and `compose.yaml` must **not** be listed. If they are, stop and fix `.gitignore` before you do anything else.
+`alertmanager/alertmanager.yml`, `prometheus/prometheus.yml` and `compose.yaml` must **not** be listed. If they are, stop and fix `.gitignore` before you do anything else.
 
 ---
 
-## 5. Add your first targets
+## 5. Create `prometheus.yml` and add your first targets
 
-Prometheus reads probe targets from `prometheus/targets/*.yml`. The template file is all comments, so it adds nothing. Create a real file for the NOC itself. Prometheus and Grafana are probed through their health endpoints on the Docker network:
+First create your own Prometheus config from the template. Prometheus does not start without it:
+
+```bash
+cp prometheus/template.yml prometheus/prometheus.yml
+```
+
+The copy already scrapes node_exporter on noc-core. You edit it later to add more hosts (see [how-to-guides.md](how-to-guides.md#add-node_exporter-for-another-host)). It is ignored by Git, because it ends up holding the IP addresses of your hosts. Only `prometheus/template.yml` is in the repo.
+
+Probe targets are separate: Prometheus reads them from `prometheus/targets/*.yml`. The template file is all comments, so it adds nothing. Create a real file for the NOC itself. Prometheus and Grafana are probed through their health endpoints on the Docker network:
 
 ```bash
 cat > prometheus/targets/noc.yml <<'EOF'
