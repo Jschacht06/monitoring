@@ -5,7 +5,7 @@ This page explains every config file in the repo: what each setting does and **w
 | File | Read by | In Git? |
 |---|---|---|
 | `compose.yaml` (from `compose-template.yaml`) | Docker Compose | Template only |
-| `prometheus/prometheus.yml` | Prometheus | Yes |
+| `prometheus/prometheus.yml` (from `prometheus/template.yml`) | Prometheus | Template only (holds the IP addresses of your hosts) |
 | `prometheus/rules/alerts.yml` | Prometheus | Yes |
 | `prometheus/targets/*.yml` | Prometheus (file_sd) | Template only |
 | `blackbox/blackbox.yml` | Blackbox Exporter | Yes |
@@ -13,7 +13,9 @@ This page explains every config file in the repo: what each setting does and **w
 
 ---
 
-## prometheus/prometheus.yml
+## prometheus/prometheus.yml (template)
+
+The repo contains `prometheus/template.yml`. Copy it to `prometheus/prometheus.yml` and edit the copy. Your own file is ignored by Git, because adding hosts puts their IP addresses in it. Everything below describes the template and what you add to it.
 
 ```yaml
 global:
@@ -29,6 +31,7 @@ rule_files:
 scrape_configs:
   - job_name: prometheus   # details below
   - job_name: node         # details below
+  - job_name: smartctl     # optional, details below
   - job_name: blackbox     # details below
 ```
 
@@ -78,6 +81,28 @@ Prometheus scrapes its own metrics. This gives you `up{job="prometheus"}` and in
 ```
 
 Scrapes node_exporter on noc-core over the Docker network (no published port). The `host` and `group` labels are added to every metric of this target, so disk alerts carry the same labels as probe alerts (`host: noc-core`). That keeps grouping and inhibition working across both. To add more hosts, see [how-to-guides.md](how-to-guides.md#add-node_exporter-for-another-host).
+
+```yaml
+    metric_relabel_configs:
+      - source_labels: [host, __name__]
+        regex: 'noc-core;(node_hwmon_.*|node_zfs_.*|node_thermal_zone_.*)'
+        action: drop
+```
+
+noc-core is an LXC and shares the Proxmox host's kernel, so its node_exporter also sees the host's ZFS pools and CPU/NVMe sensors. Without this block, one hardware problem would be reported twice (once as `host=noc-core`, once as the real host) and every such alert would arrive twice. The rule joins the `host` label and the metric name with a `;` and drops the hardware metrics only for `noc-core`. Disk and filesystem metrics of noc-core are untouched, because those are its own volumes. Remove the block if noc-core is not an LXC, and add a similar one for any other LXC you scrape.
+
+#### Job `smartctl` (optional)
+
+```yaml
+  # - job_name: smartctl
+  #   static_configs:
+  #     - targets: ['<host-ip>:9633']
+  #       labels:
+  #         host: <host-ip>
+  #         group: noc
+```
+
+Scrapes smartctl_exporter on a physical host, for drive health and drive temperature. It is commented out in the template because it needs a host with real drives. Use the same `host` value as the `node` job for the same machine: `DriveNotReadable` compares both exporters by `host`. Setup: [how-to-guides.md](how-to-guides.md#add-smartctl_exporter-for-drive-health).
 
 #### Job `blackbox`
 
@@ -158,7 +183,7 @@ All other settings use Blackbox defaults. For example, the HTTP prober does not 
 
 ### Adding a module
 
-Add a module under `modules:`, then restart Blackbox (see [operations](operations-and-troubleshooting.md#how-to-apply-a-change)). Two examples (not in the repo yet):
+Add a module under `modules:`, then restart Blackbox (see [operations](operations-and-troubleshooting.md#how-to-apply-a-change)). Two examples (not in the repo yet, **untested**):
 
 **HTTPS check that requires exactly 200 and a valid certificate:**
 
@@ -197,7 +222,7 @@ docker compose exec blackbox blackbox_exporter --config.check --config.file=/etc
 
 ## prometheus/rules/alerts.yml
 
-All rules are in one file, in three groups. Every alert has:
+All rules are in one file, in six groups. Every alert has:
 
 - `labels.severity`: what Alertmanager routes on (`critical` or `warning`).
 - `annotations.summary` / `description`: the text in the email. `{{ $labels.x }}` inserts a label of the failing series, and `{{ $value }}` the value of the expression.
@@ -211,7 +236,18 @@ All rules are in one file, in three groups. Every alert has:
 | ServiceSlow | availability | warning | 5m | Tested |
 | DiskSpaceLow | capacity | warning | 10m | Tested |
 | DiskWillFillSoon | capacity | warning | 30m | **Written, not tested** |
+| SmartStatusFailed | drives | critical | 2m | Tested (firing and resolved) |
+| DriveNotReadable | drives | critical | 5m | Firing tested on a real faulted drive; resolved email not shown yet |
+| DriveDisappeared | drives | critical | 5m | **Written, not tested** (only "returns no results" checked) |
+| ZfsPoolNotOnline | storage | critical | 2m | Tested (firing and resolved) |
+| HostTemperatureHigh | hardware | warning | 5m | Tested (firing and resolved) |
+| HostTemperatureCritical | hardware | critical | 2m | Tested (firing and resolved) |
+| NvmeTemperatureHigh | hardware | warning | 5m | Tested (firing and resolved) |
+| DriveTemperatureHigh | hardware | warning | 5m | Tested (firing and resolved) |
+| DriveTemperatureCritical | hardware | critical | 2m | Tested (firing and resolved) |
 | MonitoringCheckFailed | monitoring-health | critical | 2m | Tested |
+
+The drive, ZFS and temperature rules only produce results where the matching exporter exists (smartctl_exporter, or node_exporter on a host with ZFS or sensors). Without them they stay inactive and do no harm. They were tested by [flipping their condition](how-to-guides.md#test-an-alert-by-flipping-its-condition).
 
 ### ServiceDown
 
@@ -274,14 +310,112 @@ for: 30m
 ### MonitoringCheckFailed
 
 ```yaml
-expr: up{job=~"node|blackbox"} == 0
+expr: up{job=~"node|blackbox|smartctl"} == 0
 for: 2m
 ```
 
-- **Detects:** Prometheus cannot scrape node_exporter or the Blackbox Exporter. The monitoring is blind: probe and disk metrics stop, so `ServiceDown` and `DiskSpaceLow` **cannot** fire.
-- **In plain language:** "a scrape of the `node` or `blackbox` job failed". For `blackbox`, there is one `up` series per target. If the Blackbox container dies, it fires for every target.
+- **Detects:** Prometheus cannot scrape node_exporter, smartctl_exporter or the Blackbox Exporter. The monitoring is blind: probe and disk metrics stop, so `ServiceDown` and `DiskSpaceLow` **cannot** fire.
+- **In plain language:** "a scrape of the `node`, `blackbox` or `smartctl` job failed". For `blackbox`, there is one `up` series per target. If the Blackbox container dies, it fires for every target.
 - **Note:** `up{job="blackbox"} == 1` while the website is down is normal. See [up vs probe_success](adding-targets.md#up-vs-probe_success).
-- **What to change:** add more jobs to the regex when you add exporters (for example `node|blackbox|proxmox`). For a remote node_exporter host, a powered-off host also triggers this alert. You can suppress that with an inhibit rule, see [how-to-guides.md](how-to-guides.md#add-or-change-an-inhibit-rule).
+- **What to change:** add more jobs to the regex when you add exporters (for example `node|blackbox|smartctl|proxmox`). For a remote node_exporter host, a powered-off host also triggers this alert. You can suppress that with an inhibit rule, see [how-to-guides.md](how-to-guides.md#add-or-change-an-inhibit-rule).
+
+### Drives
+
+#### SmartStatusFailed
+
+```yaml
+expr: smartctl_device_smart_status == 0
+for: 2m
+```
+
+- **Detects:** a drive whose own SMART health check reports failure.
+- **In plain language:** "any drive whose SMART status is 0 (failed)". `1` means passed.
+- **Why critical:** a drive that says it is failing puts its data at risk.
+- **Why 2m:** the status does not flap, and a hiccup of the exporter produces a *missing* series, not a `0`. Two minutes only filters out a single odd evaluation. Waiting longer would not change what you do about it.
+
+#### DriveNotReadable
+
+```yaml
+expr: node_disk_info{device=~"sd[a-z]"} and on(host) (up{job="smartctl"} == 1) unless on(device, host) smartctl_device_smart_status
+for: 5m
+```
+
+- **Detects:** a disk that the operating system lists, but for which the smartctl exporter returns no data. This is what a drive that stops answering looks like: `SmartStatusFailed` cannot fire for it, because there is no value to evaluate.
+- **In plain language:** "the disks node_exporter knows about, on hosts whose smartctl exporter works, minus the disks that have SMART data".
+- **Why `and on(host) (up{job="smartctl"} == 1)`:** it limits the rule to hosts that really have a working smartctl exporter. Without it, noc-core (an LXC that sees the host's disks but has no smartctl exporter) fired a false alert for every disk. If the exporter itself is down, the rule stays quiet and `MonitoringCheckFailed` reports the real problem, instead of every drive looking unreadable at once.
+- **Limit:** only `sd*` drives. An NVMe drive has a different name in each exporter (`nvme0n1` vs `nvme0`), so it would need a name mapping.
+- **Seen in practice:** it fired for a faulted WD Red drive that returned `INQUIRY failed` to `smartctl` and `DID_BAD_TARGET` I/O errors in `dmesg`. The email carried the model and serial number.
+
+#### DriveDisappeared
+
+```yaml
+expr: (smartctl_device_smart_status offset 1d) unless on(device, host) smartctl_device_smart_status
+for: 5m
+```
+
+- **Detects:** a drive that reported SMART data 24 hours ago and does not now, including a drive that disappeared from the system completely (the kernel removes it from the list, so `DriveNotReadable` can no longer see it).
+- **In plain language:** "drives that existed a day ago and are gone now".
+- **Limits:** it resolves by itself 24 hours after the drive disappeared, even if the drive is still missing. Silence it during a planned drive replacement. A drive that never reported (for example one that was already broken when the exporter started) is covered by `DriveNotReadable`, not by this rule.
+- **Status: written, not tested.** A real test would mean unplugging a drive. Only the check that the expression returns no results on a healthy system was done.
+
+### Storage
+
+#### ZfsPoolNotOnline
+
+```yaml
+expr: node_zfs_zpool_state{state="online"} == 0
+for: 2m
+```
+
+- **Detects:** a ZFS pool that left the `online` state: degraded, faulted, offline, removed, suspended or unavailable.
+- **In plain language:** node_exporter exports one series per pool and state. The `online` series is `1` while the pool is healthy. Any problem flips it to `0`, so one rule covers every bad state.
+- **Note:** an exporter running inside an LXC also reports the host's pools. The `metric_relabel_configs` block in the `node` job removes that duplicate for noc-core.
+
+### Hardware
+
+#### HostTemperatureHigh and HostTemperatureCritical
+
+```yaml
+expr: node_hwmon_temp_celsius{chip=~"platform_coretemp_.*"} > 90   # High, warning, for 5m
+expr: node_hwmon_temp_celsius{chip=~"platform_coretemp_.*"} > 95   # Critical, for 2m
+```
+
+- **Detects:** a CPU core or package sensor above the limit. There is one series per sensor.
+- **Why 90 and 95:** the numbers come from this host, not from a guess. Its CPU peaked at 88 °C over 24 hours, and the chip reports a "high" mark of 82 °C and a critical limit of 100 °C. A limit below the normal peak would fire every day, so the warning sits just above the peak and the critical alert leaves a 5 °C margin below the chip's critical limit. Choose your own numbers with the queries below.
+- **Why `for:` 5m and 2m:** short heat spikes under load are normal and the CPU throttles itself. Only sustained heat is worth an email. The critical alert is already close to damage, so it waits less.
+
+#### NvmeTemperatureHigh
+
+```yaml
+expr: node_hwmon_temp_celsius{chip=~"nvme_.*"} > 70
+for: 5m
+```
+
+- **Detects:** an NVMe sensor above 70 °C.
+- **Why a fixed number:** the drive reports a critical limit of about 87 °C for its main sensor. The two secondary sensors report `65261.85` as their limit, which is an "unset" value, so the limits the hardware reports cannot be used for them.
+
+#### DriveTemperatureHigh and DriveTemperatureCritical
+
+```yaml
+expr: smartctl_device_temperature{temperature_type="current", device!~"nvme.*"} > 50   # High, warning, for 5m
+expr: smartctl_device_temperature{temperature_type="current", device!~"nvme.*"} > 60   # Critical, for 2m
+```
+
+- **Detects:** a SATA drive that is too hot. NVMe drives are left out on purpose, because `NvmeTemperatureHigh` already covers them.
+- **Why 50 and 60:** the drives here run at 26-34 °C. Many hard-disk datasheets list 55-65 °C as the maximum operating temperature, so 50 °C is an early warning and 60 °C is close to the limit. Check the datasheet of your own drives.
+
+#### Choosing the temperature thresholds
+
+Look at what the hardware really does and what it reports about itself before you pick a number:
+
+```promql
+max_over_time(node_hwmon_temp_celsius{host="<host-ip>", chip=~"platform_coretemp_.*"}[24h])   # highest value in a day
+node_hwmon_temp_crit_celsius{host="<host-ip>"}   # critical limit reported by the chip
+node_hwmon_temp_max_celsius{host="<host-ip>"}    # "high" mark reported by the chip
+smartctl_device_temperature{host="<host-ip>"}    # drive temperatures
+```
+
+Set the warning above your normal peak and the critical alert a few degrees below the chip's critical limit. Ignore limits that look absurd (such as `65261.85`): they mean "not set".
 
 ---
 
@@ -360,7 +494,7 @@ The three child routes:
 | 2 | `severity="critical"` | `email-escalation` | 15m | 5m | 4h | – | Same alerts, separate group. The long `group_wait` means the first email only goes out if the alert is **still firing after 15 minutes**. If it resolved earlier, nothing is sent. |
 | 3 | `severity="warning"` | `email-warning` | 2m | 15m | 12h | – | Warnings are not urgent. Wait longer to bundle them and remind only twice a day. |
 
-Alertmanager has no "acknowledge" button. A **silence** acts as acknowledgement: if someone silences the alert within 15 minutes, the escalation never fires.
+Alertmanager has no "acknowledge" button. A **silence** acts as acknowledgement: if someone silences the alert within 15 minutes, the escalation never fires (expected behaviour, not tested).
 
 ### `receivers`
 
@@ -418,7 +552,7 @@ Why: for a host that normally answers ping, a failing ping means the host or the
 
 ## compose.yaml
 
-The repo tracks `compose-template.yaml`. Copy it to `compose.yaml` (ignored by Git) and replace `<your-host>`.
+The repo tracks `compose-template.yaml`. Copy it to `compose.yaml` (ignored by Git) and replace `<your-host>` (twice: in `prometheus` and in `alertmanager`).
 
 ### Pinned versions
 
@@ -445,6 +579,7 @@ Why pinned, not `latest`: a rebuild or a new host gets exactly the versions that
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=45d
       - --storage.tsdb.retention.size=10GB
+      - --web.external-url=http://<your-host>:9090
     volumes:
       - ./prometheus:/etc/prometheus:ro
       - prometheus_data:/prometheus
@@ -455,7 +590,8 @@ Why pinned, not `latest`: a rebuild or a new host gets exactly the versions that
 - `./prometheus:/etc/prometheus:ro`: the **whole folder** is mounted, so `prometheus.yml`, `rules/` and `targets/` are all visible. `:ro` (read-only) means the container cannot change your config.
 - `prometheus_data`: named volume for the time-series database. It survives `docker compose down` and image upgrades.
 - Port `9090` is published for the UI and API.
-- Not set: `--web.external-url` and `--web.enable-lifecycle`. Without the first, the "Source" links on alerts in Alertmanager point to the container's hostname. Without the second, config changes need a restart instead of a reload.
+- `--web.external-url`: the address you use in a browser. Prometheus puts it in the "Source" link of each alert, so the link in Alertmanager and in emails opens the right query. Set `<your-host>` to the noc-core IP. Without it, those links point to the container's hostname.
+- Not set: `--web.enable-lifecycle`. Without it, config changes need a restart (or a `SIGHUP`) instead of an HTTP reload.
 
 ### grafana
 

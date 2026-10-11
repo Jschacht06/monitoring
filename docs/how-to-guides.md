@@ -18,7 +18,25 @@ Contents:
 - [Add or change the escalation](#add-or-change-the-escalation)
 - [Add another email receiver or change the recipients](#add-another-email-receiver-or-change-the-recipients)
 - [Add node_exporter for another host](#add-node_exporter-for-another-host)
+- [Add smartctl_exporter for drive health](#add-smartctl_exporter-for-drive-health)
+- [Test an alert by flipping its condition](#test-an-alert-by-flipping-its-condition)
 - [Move the SMTP password into a secret file](#move-the-smtp-password-into-a-secret-file)
+
+Status of the recipes on this setup:
+
+| Recipe | Status |
+|---|---|
+| Change an alert threshold or "for" duration | Tested (test values for `ServiceSlow` and `DiskSpaceLow`) |
+| Add a new alert rule | Structure tested through the existing rules; the certificate example is **untested** |
+| Change routing and timings per severity | Routing by severity tested; the two examples (1 m warning wait, `info` route) are **untested** |
+| Add or change an inhibit rule | ICMP suppresses HTTP: tested. The `MonitoringCheckFailed` rule is **untested** |
+| Silence alerts for maintenance | Tested |
+| Add or change the escalation | Tested, including the resolved email |
+| Add another email receiver or change the recipients | A second recipient is tested; the per-group route is **untested** |
+| Add node_exporter for another host | Debian package on the Proxmox host: tested. Docker on another host and the firewall steps: **untested** |
+| Add smartctl_exporter for drive health | Tested on the Proxmox host (Debian 13 package from backports) |
+| Test an alert by flipping its condition | Tested (used for the drive, ZFS and temperature alerts) |
+| Move the SMTP password into a secret file | **Untested** |
 
 ---
 
@@ -79,7 +97,7 @@ Copy this template into `prometheus/rules/alerts.yml`, either into an existing g
           runbook: "<AlertName>: 1) first check, 2) second check, 3) contact the owning group."
 ```
 
-**Example** (not in the repo yet): warn when a TLS certificate expires within 14 days. It uses a metric that HTTPS probes already produce.
+**Example** (not in the repo yet, **untested**): warn when a TLS certificate expires within 14 days. It uses a metric that HTTPS probes already produce.
 
 ```yaml
   - name: certificates
@@ -187,6 +205,8 @@ For a host that normally answers ping, a failing ping means the host or the netw
 
 ### New rule: a down host suppresses MonitoringCheckFailed
 
+> **Untested.** Not tried yet, because only noc-core has a `node` target at the moment. The outputs below are what the config should produce.
+
 When a remote host with node_exporter is powered off, two alerts fire: `ServiceDown` for its ICMP probe, and `MonitoringCheckFailed` because the `node` job can't scrape it. The second is a symptom. Add this entry to the `inhibit_rules:` list:
 
 ```yaml
@@ -258,7 +278,7 @@ A **silence** mutes notifications for alerts that match a set of labels, for a s
 
 What a silence **does**:
 
-- It stops all emails for matching alerts on every route, including escalation. It acts as an "acknowledge": silence a critical alert within 15 minutes and the escalation is never sent.
+- It stops all emails for matching alerts on every route, including escalation. It acts as an "acknowledge": silence a critical alert within 15 minutes and the escalation should never be sent (expected behaviour, not tested).
 - It persists across restarts, because it is stored in the `alertmanager_data` volume.
 - It can be created in advance with a start time, for planned maintenance.
 
@@ -330,7 +350,7 @@ How it works:
 
 1. `continue: true` on the first route makes Alertmanager also check the second route. Without it, matching stops at the first route and the escalation never happens.
 2. The second route starts its own group with a 15-minute `group_wait`. If the alert resolved within those 15 minutes, there is nothing left to send and the escalation stays quiet. If it is still firing, `email-escalation` gets it.
-3. A silence created within the 15 minutes stops the escalation too.
+3. A silence created within the 15 minutes stops the escalation too (expected behaviour, not tested).
 
 The receiver:
 
@@ -395,6 +415,8 @@ Edit `to:` in `alertmanager/alertmanager.yml`. Separate several addresses with c
 
 ### Add a receiver for one group
 
+> **Untested.** Not tried on this setup yet.
+
 Every alert carries the `group` label from its target. To also notify the owning group directly, add a receiver:
 
 ```yaml
@@ -439,9 +461,45 @@ Expected receivers: `email-group-a,email-critical,email-escalation`.
 
 Only do this on hosts where you are **allowed** to install software. For everything else, stay with black-box probes.
 
-### 1. Run node_exporter on the host
+> **Status.** Option A (Debian package) is **tested** on the Proxmox host (PVE 9, Debian 13, package 1.9.0). Option B (Docker) is tested on noc-core only; on a second host it is **untested**. The firewall steps for ufw and the Proxmox firewall are **untested**.
 
-With Docker, use the same version as the NOC:
+Pick one of the two ways to run it:
+
+| | Option A: Debian package | Option B: Docker |
+|---|---|---|
+| Best for | Hosts without Docker, such as a Proxmox host or a plain VM | Hosts that already run Docker, such as noc-core |
+| Version | The distro's version (Debian 13 / PVE 9: 1.9.0; Debian 12 / PVE 8: 1.5.0) | Same as the NOC (v1.12.1) |
+| Updates | With `apt upgrade` | Change the image tag |
+| Tested | Proxmox host | noc-core |
+
+The Debian version is older, but for this project it exposes everything needed: filesystems (including ZFS), temperatures (`hwmon`), memory, CPU, network and the apt update status. On Proxmox 8 (Debian 12) the package is much older (1.5.0); there, prefer the release binary or Docker.
+
+### 1A. Install the Debian package
+
+Run on the monitored host as root:
+
+```bash
+apt update
+apt install -y prometheus-node-exporter
+```
+
+By default the package listens on **all** interfaces. Bind it to the host's LAN address only (the one you use to reach the host, for example the Proxmox web UI address). Edit `/etc/default/prometheus-node-exporter` and set the `ARGS` line (edit the existing one, don't add a second):
+
+```bash
+ARGS="--web.listen-address=<host-ip>:9100"
+```
+
+```bash
+systemctl restart prometheus-node-exporter
+systemctl status prometheus-node-exporter --no-pager
+ss -tlnp | grep 9100
+```
+
+The status should be `active (running)`, and `ss` should show `<host-ip>:9100`, not `*:9100` or `0.0.0.0:9100`.
+
+### 1B. Or run it with Docker
+
+Use the same version as the NOC:
 
 ```bash
 docker run -d --name node-exporter --restart unless-stopped \
@@ -454,7 +512,14 @@ docker run -d --name node-exporter --restart unless-stopped \
 
 ### 2. Restrict port 9100 to the NOC
 
-node_exporter has no authentication. Anyone who can reach port 9100 can read hardware details, mount points and network configuration of the host. Only noc-core needs it. With ufw on the monitored host:
+node_exporter has no authentication. Anyone who can reach port 9100 can read hardware details, mount points and network configuration of the host. Only noc-core needs it. Which control works depends on where you can apply it:
+
+| Where | What it covers | Limit |
+|---|---|---|
+| Firewall on the monitored host (ufw, or the Proxmox firewall) | Every source, including devices in the same VLAN | Needs access to the host; a wrong rule can lock you out |
+| Network firewall (for example UniFi zone policies: allow noc-core, block the rest, both with destination `<host-ip>` port 9100) | Traffic **between** VLANs | Does **not** see traffic inside one VLAN, because that never reaches the gateway |
+
+With ufw on the monitored host:
 
 ```bash
 ufw allow from <noc-core-ip> to any port 9100 proto tcp
@@ -464,13 +529,15 @@ ufw status numbered
 
 The `allow` rule must come before the `deny` (ufw evaluates rules in order).
 
+On a Proxmox host, use **Datacenter → Firewall** instead: add accept rules for noc-core (tcp 9100), the web UI (tcp 8006), SSH (tcp 22) and ICMP from noc-core if you ping the host. Do this **before** setting *Input Policy* to `DROP` and *Firewall* to `Yes`, and keep console access ready: a missing rule locks you out of the web UI. `pve-firewall stop` on the console switches it off again.
+
 **Check from noc-core** (it should work):
 
 ```bash
 docker compose exec prometheus wget -qO- http://<host-ip>:9100/metrics | head -5
 ```
 
-From any other machine, `curl http://<host-ip>:9100/metrics` should time out.
+From a machine the firewall should block, `curl http://<host-ip>:9100/metrics` should time out.
 
 ### 3. Add the host to the `node` job
 
@@ -501,10 +568,165 @@ docker compose restart prometheus
 - *Status → Target health*: the `node` job shows the new target as **UP**.
 - Query `node_filesystem_avail_bytes{host="<host-ip>"}`: it returns values.
 - `DiskSpaceLow`, `DiskWillFillSoon` and `MonitoringCheckFailed` now cover this host automatically.
+- Check the collectors: `node_scrape_collector_success{host="<host-ip>"}`. The ones you need should be `1`. Collectors for hardware the host doesn't have (for example `infiniband`, `fibrechannel`, `ipvs`, `nfsd`) show `0`. That is normal and not a problem.
+
+### Extra checks for a Proxmox host
+
+These worked on the Proxmox host (PVE 9, ZFS):
+
+```promql
+node_hwmon_temp_celsius{host="<host-ip>"}                        # CPU, NVMe and NIC temperatures
+node_filesystem_avail_bytes{host="<host-ip>", fstype="zfs"}      # ZFS pools and one entry per LXC volume
+node_zfs_zpool_state{host="<host-ip>"}                           # pool health: state="online" is 1 when healthy
+```
+
+Notes:
+
+- `DiskSpaceLow` includes `zfs`, so it also covers every LXC volume. Several alerts for the same pool still arrive as one email, because alerts are grouped by `host`.
+- VM disks are ZFS volumes, not filesystems, so they don't show up in `node_filesystem_*`.
+- Temperatures only exist on real hardware. They are not available inside an LXC or most VMs.
+- An exporter that runs inside an LXC (such as the one on noc-core) reports the **host's** ZFS pools and CPU sensors, because an LXC shares the host's kernel. Left alone, every such alert arrives twice, once for the host and once for the LXC. `prometheus.yml` drops these metrics for `noc-core` with `metric_relabel_configs`; do the same for any other LXC you scrape.
+
+---
+
+## Add smartctl_exporter for drive health
+
+> **Status.** Tested on the Proxmox host (Proxmox 9, Debian 13, package 0.14.0). Only for hosts where you are **allowed** to install software and that have physical drives. It is no use inside an LXC or most VMs, because virtual disks have no SMART data.
+
+smartctl_exporter reads the SMART data of each drive (the drive's own health report) with `smartctl` and turns it into metrics. Prometheus can then alert on a drive that reports failure, a drive that stops answering, and drive temperature. See the [alert reference](configuration-reference.md#drives) for the rules.
+
+### 1. Check that the host can read its drives
+
+```bash
+smartctl --scan
+smartctl -H /dev/<drive>
+```
+
+Every physical drive should be listed, and `-H` should say `PASSED`. If `smartctl` cannot read a drive, the exporter cannot either. Drives behind a RAID controller or a USB bridge may need extra options.
+
+### 2. Install the package
+
+On Debian 13 (Proxmox 9) the package `prometheus-smartctl-exporter` is **not** in the normal repository, only in `trixie-backports`:
+
+```bash
+echo "deb http://deb.debian.org/debian trixie-backports main" > /etc/apt/sources.list.d/trixie-backports.list
+apt update
+apt install -t trixie-backports prometheus-smartctl-exporter
+```
+
+Packages from backports are only installed when you ask for them with `-t`, so the rest of the system is unchanged. The service is called `smartctl_exporter` (with an underscore), not after the package.
+
+### 3. Listen on the host's LAN address only
+
+The package starts the exporter on **all** interfaces (port 9633) and has no settings file. Set the address and some basic sandboxing with a systemd override:
+
+```bash
+systemctl edit smartctl_exporter
+```
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/bin/smartctl_exporter --web.listen-address=<host-ip>:9633
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+```
+
+The empty `ExecStart=` line is required: it clears the original command so yours replaces it instead of being added to it. The other four lines limit what the process can do. The package runs the exporter as `root`, which it needs for raw disk access, so the sandboxing matters.
+
+```bash
+systemctl restart smartctl_exporter
+systemctl status smartctl_exporter --no-pager -l
+ss -tlnp | grep 9633
+curl -s http://<host-ip>:9633/metrics | grep smartctl_device_smart_status
+```
+
+- `ss` should show `<host-ip>:9633`, not `*:9633`.
+- `curl` should print one line per readable drive. `1` means the drive passed its health check.
+- The log shows `Found device` for every drive. A line like `Smartctl open device: /dev/sdX failed` means that drive has **no metrics**. The `DriveNotReadable` alert exists for exactly that case.
+
+### 4. Add the job to Prometheus
+
+Uncomment the `smartctl` job in your `prometheus/prometheus.yml` (the template has it commented out) and fill in the IP:
+
+```yaml
+  - job_name: smartctl
+    static_configs:
+      - targets: ['<host-ip>:9633']
+        labels:
+          host: <host-ip>
+          group: noc
+```
+
+```bash
+docker compose exec prometheus promtool check config /etc/prometheus/prometheus.yml
+docker compose restart prometheus
+```
+
+Use the **same** `host` value as the node job and the probes for this machine: `DriveNotReadable` compares the two exporters by `host`.
+
+Verify:
+
+- *Status → Target health*: the `smartctl` job shows **UP**.
+- `smartctl_device_smart_status{host="<host-ip>"}` returns one series per drive.
+- `smartctl_device_temperature{host="<host-ip>"}` returns the temperatures (label `temperature_type="current"`).
+
+`MonitoringCheckFailed` already covers this job, so you are alerted if the exporter stops answering.
+
+### 5. Restrict the port
+
+The exporter has no authentication, like node_exporter. Restrict port 9633 to noc-core in the same way as port 9100, see [step 2 of the node_exporter recipe](#2-restrict-port-9100-to-the-noc). The same limits apply.
+
+---
+
+## Test an alert by flipping its condition
+
+> **Status.** Tested. Used for all drive, ZFS and temperature alerts, including the resolved emails.
+
+A healthy system fires no alerts, so you cannot see the whole path (rule, Alertmanager, email) work. The trick is to **temporarily flip the condition** so it is true right now, and then put it back. You test the real rule with the real routing, without breaking anything.
+
+| Rule | Normal condition | Temporary flip |
+|---|---|---|
+| `SmartStatusFailed`, `ZfsPoolNotOnline`, `ServiceDown` | `== 0` | `== 1` |
+| A temperature rule, for example `HostTemperatureHigh` | `> 90` | `> 10` |
+| `DiskSpaceLow` | `< 0.15` | `< 0.99` |
+
+### 1. Flip, validate and restart
+
+Edit `expr:` in `prometheus/rules/alerts.yml`, then:
+
+```bash
+docker compose exec prometheus promtool check rules /etc/prometheus/rules/alerts.yml
+docker compose restart prometheus
+```
+
+You can flip several rules at once. The alert then fires for **every** matching series, for example one per sensor, per drive and per host, so expect several alerts in one email.
+
+### 2. Wait for the FIRING emails
+
+The delay is `for:` plus up to 1 minute for the rule evaluation plus the group wait of the route: 30 s for critical and 2 minutes for warning (see [routing](configuration-reference.md#route-the-routing-tree)).
+
+### 3. Put everything back, then restart again
+
+Restore **every** flipped `expr`, validate and restart. Check the result with `git diff prometheus/rules/alerts.yml`: only intended changes should show. A flipped rule that is left in place keeps sending false critical emails.
+
+### 4. Wait for the RESOLVED emails
+
+Resolved notifications follow the route's `group_interval`: up to **5 minutes** for critical and up to **15 minutes** for warning. If a resolved email seems missing, wait for that time before you look for a problem.
+
+### 5. Check the Alerts page
+
+Open *Alerts* in Prometheus. Everything should be **Inactive** again, except alerts that are really firing.
+
+Tell the people who receive the emails before you test. A flip test sends real critical emails.
 
 ---
 
 ## Move the SMTP password into a secret file
+
+> **Untested.** Not tried on this setup yet. If Alertmanager cannot read the file, check its owner and mode first.
 
 Instead of `smtp_auth_password` in `alertmanager.yml`, Alertmanager can read the password from a separate file. This keeps the password out of the config: you can show, diff or share `alertmanager.yml` without leaking it, and give the file stricter permissions.
 

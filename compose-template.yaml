@@ -1,5 +1,5 @@
 # This is a Docker Compose template for setting up Prometheus, Grafana, Blackbox Exporter, and Alertmanager.
-# Change the host ip in the alertmanager service to your host ip address.
+# Replace <your-host> (twice: prometheus and alertmanager) with the IP address of your host.
 
 services:
   prometheus:
@@ -12,6 +12,7 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=45d
       - --storage.tsdb.retention.size=10GB
+      - --web.external-url=http://<your-host>:9090
     volumes:
       - ./prometheus:/etc/prometheus:ro
       - prometheus_data:/prometheus

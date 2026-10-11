@@ -46,12 +46,11 @@ groups:
           summary: "Disk on {{ $labels.host }} ({{ $labels.mountpoint }}) predicted full within 24h"
           description: "At the current growth rate {{ $labels.mountpoint }} on {{ $labels.host }} runs out of space within 24 hours."
           runbook: "DiskWillFillSoon: 1) check recent growth, 2) clean or extend before it fills, 3) contact the owning group."
-
 #selfcheck
   - name: monitoring-health
     rules:
       - alert: MonitoringCheckFailed
-        expr: up{job=~"node|blackbox"} == 0
+        expr: up{job=~"node|blackbox|smartctl"} == 0
         for: 2m
         labels:
           severity: critical
@@ -59,3 +58,89 @@ groups:
           summary: "Monitoring check '{{ $labels.job }}' is failing ({{ $labels.instance }})"
           description: "Prometheus cannot scrape job {{ $labels.job }} (instance {{ $labels.instance }}) for more than 2 minutes. Alerts for this target are blind until it is fixed."
           runbook: "MonitoringCheckFailed: 1) check the exporter container (docker compose ps), 2) check its logs, 3) restart it, 4) verify under Status > Targets in Prometheus."
+# drive checks
+
+  - name: drives
+    rules:
+      - alert: SmartStatusFailed
+        expr: smartctl_device_smart_status == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Drive {{ $labels.device }} on {{ $labels.host }} reports SMART failure"
+          description: "The SMART health check of {{ $labels.device }} on {{ $labels.host }} failed. Check `smartctl -a /dev/{{ $labels.device }}` and back up the data."
+      - alert: DriveDisappeared
+        expr: (smartctl_device_smart_status offset 1d) unless on(device, host) smartctl_device_smart_status
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Drive {{ $labels.device }} on {{ $labels.host }} no longer reports SMART data"
+          description: "{{ $labels.device }} on {{ $labels.host }} reported SMART data 24 hours ago but not now. It may have failed, been unplugged or lost its connection."
+      - alert: DriveNotReadable
+        expr: node_disk_info{device=~"sd[a-z]"} and on(host) (up{job="smartctl"} == 1) unless on(device, host) smartctl_device_smart_status
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Drive {{ $labels.device }} on {{ $labels.host }} is visible but SMART data cannot be read"
+          description: "The OS lists {{ $labels.device }} on {{ $labels.host }}, but the smartctl exporter returns no data for it. The drive or its connection may have failed."
+  - name: storage
+    rules:
+      - alert: ZfsPoolNotOnline
+        expr: node_zfs_zpool_state{state="online"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ZFS pool {{ $labels.zpool }} on {{ $labels.host }} is not online"
+          description: "Pool {{ $labels.zpool }} on {{ $labels.host }} left the online state (degraded, faulted, offline or unavailable). Check `zpool status {{ $labels.zpool }}` on the host."
+
+# temperature checks
+  - name: hardware
+    rules:
+      - alert: HostTemperatureHigh
+        expr: node_hwmon_temp_celsius{chip=~"platform_coretemp_.*"} > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU temperature on {{ $labels.host }} is high ({{ $value }} °C)"
+          description: "Sensor {{ $labels.sensor }} on {{ $labels.chip }} has been above 90 °C for 5 minutes on {{ $labels.host }}. Check cooling, dust and load."
+
+      - alert: HostTemperatureCritical
+        expr: node_hwmon_temp_celsius{chip=~"platform_coretemp_.*"} > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CPU temperature on {{ $labels.host }} is critical ({{ $value }} °C)"
+          description: "Sensor {{ $labels.sensor }} on {{ $labels.chip }} is above 95 °C on {{ $labels.host }}. Throttling or shutdown is close."
+
+      - alert: NvmeTemperatureHigh
+        expr: node_hwmon_temp_celsius{chip=~"nvme_.*"} > 70
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NVMe temperature on {{ $labels.host }} is high ({{ $value }} °C)"
+          description: "Sensor {{ $labels.sensor }} on {{ $labels.chip }} has been above 70 °C for 5 minutes on {{ $labels.host }}."
+
+      - alert: DriveTemperatureHigh
+        expr: smartctl_device_temperature{temperature_type="current", device!~"nvme.*"} > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Drive {{ $labels.device }} on {{ $labels.host }} is hot ({{ $value }} °C)"
+          description: "{{ $labels.device }} on {{ $labels.host }} has been above 50 °C for 5 minutes. Check airflow and fans."
+
+      - alert: DriveTemperatureCritical
+        expr: smartctl_device_temperature{temperature_type="current", device!~"nvme.*"} > 60
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Drive {{ $labels.device }} on {{ $labels.host }} is overheating ({{ $value }} °C)"
+          description: "{{ $labels.device }} on {{ $labels.host }} is above 60 °C. Risk of damage; check airflow and fans now."

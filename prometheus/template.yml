@@ -1,0 +1,61 @@
+# Copy this file to prometheus.yml (cp prometheus/template.yml prometheus/prometheus.yml) and edit the copy.
+# Keep this template free of real values such as IP addresses: prometheus.yml is ignored by Git.
+global:
+  scrape_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+rule_files:
+  - /etc/prometheus/rules/*.yml
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+  - job_name: node
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          host: noc-core
+          group: noc
+      # Add more hosts here, see docs/how-to-guides.md#add-node_exporter-for-another-host
+      # - targets: ['<host-ip>:9100']
+      #   labels:
+      #     host: <host-ip>
+      #     group: group-a
+    # noc-core is an LXC: it shares the Proxmox kernel, so its node_exporter also reports the
+    # host's ZFS pools and CPU/NVMe sensors. Drop them here so one problem is not reported twice
+    # (as host=noc-core and as the real host). Remove this block if noc-core is not an LXC.
+    metric_relabel_configs:
+      - source_labels: [host, __name__]
+        regex: 'noc-core;(node_hwmon_.*|node_zfs_.*|node_thermal_zone_.*)'
+        action: drop
+
+  # Optional: smartctl_exporter (drive health) on a physical host. Uncomment, fill in the
+  # host IP and see docs/how-to-guides.md#add-smartctl_exporter-for-drive-health
+  # - job_name: smartctl
+  #   static_configs:
+  #     - targets: ['<host-ip>:9633']
+  #       labels:
+  #         host: <host-ip>
+  #         group: noc
+
+  # Probes: do not add targets here. Add them in targets/*.yml
+  - job_name: blackbox
+    metrics_path: /probe
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/*.yml
+        refresh_interval: 1m
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
