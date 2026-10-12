@@ -1,0 +1,5 @@
+default:
+  user: <prometheus-user>@pve
+  token_name: <token-name>
+  token_value: <token-value>
+  verify_ssl: false

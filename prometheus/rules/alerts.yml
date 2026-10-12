@@ -50,7 +50,7 @@ groups:
   - name: monitoring-health
     rules:
       - alert: MonitoringCheckFailed
-        expr: up{job=~"node|blackbox|smartctl"} == 0
+        expr: up{job=~"node|blackbox|smartctl|pve"} == 0
         for: 2m
         labels:
           severity: critical
@@ -144,3 +144,26 @@ groups:
         annotations:
           summary: "Drive {{ $labels.device }} on {{ $labels.host }} is overheating ({{ $value }} °C)"
           description: "{{ $labels.device }} on {{ $labels.host }} is above 60 °C. Risk of damage; check airflow and fans now."
+
+
+# Proxmox guests (VMs and LXCs)
+  - name: proxmox
+    rules:
+      - alert: PveCriticalGuestNotRunning
+        expr: pve_guest_info{tags=~"(.*;)?monitored-critical(;.*)?"} and on(id) (pve_up == 0)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical guest {{ $labels.name }} ({{ $labels.id }}) on {{ $labels.host }} is not running"
+          description: "{{ $labels.name }} ({{ $labels.id }}) has the 'monitored-critical' tag in Proxmox but is stopped. If it was stopped on purpose, remove the tag in Proxmox."
+          runbook: "PveCriticalGuestNotRunning: 1) open the guest in the Proxmox web UI, 2) start it and read the task log if it will not start, 3) if the stop was intended, remove the 'monitored-critical' tag."
+      - alert: PveGuestNotRunning
+        expr: pve_guest_info{tags=~"(.*;)?monitored-warning(;.*)?"} and on(id) (pve_up == 0)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Guest {{ $labels.name }} ({{ $labels.id }}) on {{ $labels.host }} is not running"
+          description: "{{ $labels.name }} ({{ $labels.id }}) has the 'monitored-warning' tag in Proxmox but is stopped. If it was stopped on purpose, remove the tag in Proxmox."
+          runbook: "PveGuestNotRunning: 1) open the guest in the Proxmox web UI, 2) start it and read the task log if it will not start, 3) if the stop was intended, remove the 'monitored-warning' tag."

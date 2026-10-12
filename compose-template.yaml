@@ -50,6 +50,13 @@ services:
     pid: host
     volumes:
       - /:/host:ro,rslave
+  pve-exporter:
+    image: prompve/prometheus-pve-exporter:3.10.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9221:9221"
+    volumes:
+      - ./pve/pve.yml:/etc/prometheus/pve.yml:ro
 volumes:
   prometheus_data:
   grafana_data:

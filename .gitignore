@@ -8,6 +8,5 @@ compose.yaml
 
 /prometheus/prometheus.yml
 
-# Local Proxmox API credentials, CA files, guest inventory and approved budgets.
-/pve-exporter/
-/prometheus/rules/smith-resources.yml
+/pve/*
+!/pve/template.yml
