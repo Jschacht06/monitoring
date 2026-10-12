@@ -1,0 +1,98 @@
+# Copy to prometheus/rules/smith-resources.yml only after filling in every placeholder.
+# The copy is ignored by Git; this template is outside the loaded rules/*.yml folder.
+# Last inventory/budget review: <YYYY-MM-DD>; approved by: <budget-owner>.
+# All byte values use bytes, not GiB. 1 GiB = 1073741824 bytes.
+groups:
+  - name: noc-smith-resources
+    interval: 1m
+    rules:
+      # Repeat these three budget records for each approved group.
+      - record: noc_group_cpu_budget_cores
+        expr: vector(<approved-vcpu-budget>)
+        labels:
+          group: '<group-name>'
+      - record: noc_group_memory_budget_bytes
+        expr: vector(<approved-memory-budget-in-bytes>)
+        labels:
+          group: '<group-name>'
+      - record: noc_group_disk_budget_bytes
+        expr: vector(<approved-disk-budget-in-bytes>)
+        labels:
+          group: '<group-name>'
+
+      # Repeat this pair for EVERY in-scope guest, including stopped guests.
+      # Use the exact API id, e.g. lxc/101 or qemu/102. One group per id.
+      - record: noc_guest_info
+        expr: vector(1)
+        labels:
+          id: '<type>/<vmid>'
+          group: '<group-name>'
+          host: '<same-host-label-as-probes>'
+      # Sum all provisioned disks charged to this guest by the agreed budget policy.
+      # This is reviewed inventory, not measured physical storage consumption.
+      - record: noc_guest_disk_allocated_bytes
+        expr: vector(<all-provisioned-guest-disks-in-bytes>)
+        labels:
+          id: '<type>/<vmid>'
+          group: '<group-name>'
+          host: '<same-host-label-as-probes>'
+
+      # Everything below is shared: keep one copy, after all budget/inventory entries.
+      # Match the exact, case-sensitive API node label; scrape the cluster once.
+      - record: noc_guest_scope
+        expr: |
+          (pve_guest_info{job="pve",node="<smith-node-name>",template!="1"}
+            * on(id) group_left(group,host) noc_guest_info)
+          and on(job,instance) (up{job="pve"} == 1)
+
+      - record: noc_smith_unmapped_guest_info
+        expr: |
+          (pve_guest_info{job="pve",node="<smith-node-name>",template!="1"}
+            unless on(id) noc_guest_info)
+          and on(job,instance) (up{job="pve"} == 1)
+
+      - record: noc_guest_cpu_allocated_cores
+        expr: |
+          pve_cpu_usage_limit{job="pve",id=~"qemu/.+|lxc/.+"}
+            * on(id) group_left(group,host,node,name) noc_guest_scope
+      - record: noc_guest_cpu_used_cores
+        expr: |
+          (pve_cpu_usage_ratio{job="pve",id=~"qemu/.+|lxc/.+"}
+            * on(job,instance,id) pve_cpu_usage_limit{job="pve",id=~"qemu/.+|lxc/.+"})
+            * on(id) group_left(group,host,node,name) noc_guest_scope
+      - record: noc_guest_memory_allocated_bytes
+        expr: |
+          pve_memory_size_bytes{job="pve",id=~"qemu/.+|lxc/.+"}
+            * on(id) group_left(group,host,node,name) noc_guest_scope
+      - record: noc_guest_memory_used_bytes
+        expr: |
+          pve_memory_usage_bytes{job="pve",id=~"qemu/.+|lxc/.+"}
+            * on(id) group_left(group,host,node,name) noc_guest_scope
+
+      # Hide a group's live total when ANY inventoried guest lacks that metric.
+      # Unmapped API guests still need review: the dashboard lists them separately.
+      - record: noc_group_cpu_allocated_cores
+        expr: |
+          sum by(group) (noc_guest_cpu_allocated_cores)
+          unless on(group) count by(group) (
+            noc_guest_info unless on(id) noc_guest_cpu_allocated_cores)
+      - record: noc_group_cpu_used_cores
+        expr: |
+          sum by(group) (noc_guest_cpu_used_cores)
+          unless on(group) count by(group) (
+            noc_guest_info unless on(id) noc_guest_cpu_used_cores)
+      - record: noc_group_memory_allocated_bytes
+        expr: |
+          sum by(group) (noc_guest_memory_allocated_bytes)
+          unless on(group) count by(group) (
+            noc_guest_info unless on(id) noc_guest_memory_allocated_bytes)
+      - record: noc_group_memory_used_bytes
+        expr: |
+          sum by(group) (noc_guest_memory_used_bytes)
+          unless on(group) count by(group) (
+            noc_guest_info unless on(id) noc_guest_memory_used_bytes)
+      - record: noc_group_disk_allocated_bytes
+        expr: |
+          sum by(group) (noc_guest_disk_allocated_bytes)
+          unless on(group) count by(group) (
+            noc_guest_info unless on(id) noc_guest_disk_allocated_bytes)

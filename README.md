@@ -60,11 +60,13 @@ Tested end to end:
 - **Alerts for drives, ZFS and temperatures**: `SmartStatusFailed`, `DriveNotReadable`, `ZfsPoolNotOnline` and five temperature alerts (`HostTemperatureHigh`/`Critical`, `NvmeTemperatureHigh`, `DriveTemperatureHigh`/`Critical`). All were tested by flipping their condition, with the firing and resolved emails. `DriveNotReadable` fired for a real faulted drive.
 - **Flip test**: a way to prove an alert end to end without breaking anything, see [docs/how-to-guides.md](docs/how-to-guides.md#test-an-alert-by-flipping-its-condition).
 - **Grafana** with Prometheus as a data source (added by hand).
+- **Service catalogue documentation and dashboard template**: ownership, contacts and dependencies; see [docs/service-catalogue.md](docs/service-catalogue.md).
 
 Written but not tested:
 
 - **Alert `DiskWillFillSoon`** (warning): a linear forecast says the disk is full within 24 hours. It needs hours of real disk growth to test, so it has not fired yet.
 - **Alert `DriveDisappeared`** (critical): a drive that reported SMART data 24 hours ago and does not now. A real test needs a drive to be unplugged.
+- **Health/resource dashboard guides and templates**: a next-step implementation guide, two manual-import dashboards and proposed Smith API/resource-budget rules. They have not been imported or tested on the running school/home environment; see [docs/health-and-usage-dashboards.md](docs/health-and-usage-dashboards.md).
 
 Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tried on this setup yet are marked **Untested** there.
 
@@ -103,7 +105,7 @@ The quick start does not add any probe targets yet. Add your first target file a
 .
 ├── README.md                     # This file
 ├── compose-template.yaml         # Docker Compose stack; copy to compose.yaml (ignored by Git) and set your host IP
-├── .gitignore                    # Keeps compose.yaml, alertmanager.yml (secrets) and real target files out of Git
+├── .gitignore                    # Keeps local configs, secrets, real targets and proposed API/budget copies out of Git
 ├── alertmanager/
 │   └── template.yml              # Alertmanager config template; copy to alertmanager.yml and add SMTP + recipients
 ├── blackbox/
@@ -120,7 +122,16 @@ The quick start does not add any probe targets yet. Add your first target file a
     ├── adding-targets.md                 # How to add services and hosts to monitor
     ├── configuration-reference.md        # Every config file explained
     ├── how-to-guides.md                  # Recipes: thresholds, routing, inhibition, silences, escalation, ...
-    └── operations-and-troubleshooting.md # Daily commands, applying changes, known problems, security
+    ├── operations-and-troubleshooting.md # Daily commands, applying changes, known problems, security
+    ├── README.md                        # Index of all monitoring and dashboard guides
+    ├── service-catalogue.md              # Target ownership, contacts, dependencies and catalogue checks
+    ├── service-catalogue-dashboard.md    # Catalogue creation, export and import
+    ├── dashboard-template.json          # Catalogue dashboard import template
+    ├── health-and-usage-dashboards.md    # Next step: service health, resource budgets and trends
+    ├── smith-resource-metrics.md         # Proposed approved API exporter and resource-budget integration
+    ├── service-health-dashboard-template.json # Health dashboard import template
+    ├── smith-resources-dashboard-template.json # Resource dashboard import template
+    └── smith-resource-rules-template.yml # Placeholder rules; not loaded from docs/
 ```
 
 ## Documentation
@@ -132,3 +143,12 @@ The quick start does not add any probe targets yet. Add your first target file a
 | [docs/configuration-reference.md](docs/configuration-reference.md) | Understand what each setting does |
 | [docs/how-to-guides.md](docs/how-to-guides.md) | Change thresholds, routing, inhibition, silences, escalation, receivers or secrets |
 | [docs/operations-and-troubleshooting.md](docs/operations-and-troubleshooting.md) | Run the stack day to day and fix common problems |
+| [docs/README.md](docs/README.md) | Find all monitoring and service catalogue guides |
+| [docs/service-catalogue.md](docs/service-catalogue.md) | Add ownership, contacts and dependencies to the Grafana service catalogue |
+| [docs/service-catalogue-dashboard.md](docs/service-catalogue-dashboard.md) | Create, edit, export and import the catalogue dashboard |
+| [docs/dashboard-template.json](docs/dashboard-template.json) | Start from the Grafana catalogue dashboard template |
+| [docs/health-and-usage-dashboards.md](docs/health-and-usage-dashboards.md) | Build service-health, Smith resource-budget and historical-trend dashboards |
+| [docs/smith-resource-metrics.md](docs/smith-resource-metrics.md) | Prepare approved read-only API access, guest ownership and resource budgets |
+| [docs/service-health-dashboard-template.json](docs/service-health-dashboard-template.json) | Import the health/status-history/latency/availability dashboard |
+| [docs/smith-resources-dashboard-template.json](docs/smith-resources-dashboard-template.json) | Import the resource allocation/budget/trend dashboard after preparing its metrics |
+| [docs/smith-resource-rules-template.yml](docs/smith-resource-rules-template.yml) | Customize the proposed guest mapping and approved-budget recording rules |

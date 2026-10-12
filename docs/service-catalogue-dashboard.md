@@ -303,3 +303,5 @@ To apply this updated layout to an existing dashboard, make a fresh local copy o
 Why saving/exporting matters: this workflow imports JSON manually. Saving in Grafana does not update your JSON file, and changing a JSON file does not automatically update Grafana.
 
 **Check:** keep your working JSON or latest export on your computer with the project evidence. Upload that local file through the school Grafana web interface when repeating the import, selecting the school's Prometheus source.
+
+Next step: [health-and-usage-dashboards.md](health-and-usage-dashboards.md) adds service health, Smith resource-budget comparisons and trends while keeping this catalogue as the ownership list.

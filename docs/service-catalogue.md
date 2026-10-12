@@ -27,6 +27,8 @@ Placeholders used in this guide:
 
 On each clean Debian 13 LXC, first follow [setup.md](setup.md) through step 8. That installs the tools, clones the repo into `/opt/monitoring`, prepares the Compose and Alertmanager configuration, starts the stack and creates the Prometheus data source. Continue here after those checks pass. The catalogue guide assumes sufficient resources and does not repeat the server installation.
 
+The base setup also copies `prometheus/template.yml` to `prometheus/prometheus.yml`. The latter is now an ignored local configuration file. On an existing installation, keep your current copy and integrate new template settings into it; copy the template only when creating a configuration for the first time.
+
 | Component | Address |
 |---|---|
 | Grafana in your browser | `http://<noc-core-ip>:3000` |
@@ -203,6 +205,8 @@ nano prometheus/prometheus.yml
 
 Update these two existing entries under `scrape_configs`. Keep the rest of the file, including the `blackbox` job. Replace the owner/contact placeholders, using exactly the same values as the corresponding service probes:
 
+Apply the examples below as label updates to your existing `static_configs` entries. Preserve additional host targets and the `node` job's `metric_relabel_configs` from the current template: that block drops shared Proxmox hardware and ZFS metrics from `noc-core` when it runs in an LXC. Replacing the entire job with the shorter example would lose that filtering.
+
 ```yaml
   - job_name: prometheus
     static_configs:
@@ -233,6 +237,25 @@ Why: the dashboard uses all `up` series so an unlabeled internal job is not sile
 `localhost:9090` is correct for Prometheus's self-scrape: that request runs inside Prometheus. It is different from a destination probed by Blackbox.
 
 For another host's Node Exporter, add the same catalogue labels to its static target block too. Keep its `host` value equal to that host's probes, as described in [how-to-guides.md](how-to-guides.md#add-node_exporter-for-another-host).
+
+### Optional drive-health exporter
+
+If you enabled the Prometheus template's optional `smartctl` job, add all six catalogue labels to each of its existing static target entries as well. Its `up` series is included in the same dashboard completeness check. Keep the exporter address and its existing `host` and `group` values, and add the missing fields:
+
+```yaml
+  - job_name: smartctl
+    static_configs:
+      - targets: ['<school-host>:9633']
+        labels:
+          group: noc
+          service: smartctl-exporter
+          host: '<school-host>'
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: 'external:docker'
+```
+
+Replace the placeholders and set dependencies to match how the exporter is actually installed. Use the same `host` label as that machine's Node Exporter so the drive and host alerts stay aligned. Update an enabled job rather than creating a duplicate; leave the optional job commented out if you are not collecting drive health. The installation steps are in [how-to-guides.md](how-to-guides.md#add-smartctl_exporter-for-drive-health).
 
 **Check:**
 
