@@ -10,7 +10,7 @@ This guide continues from the working [service catalogue](service-catalogue.md).
 | Service health and trends (new) | Which check fails, is the check itself working, how has health/latency changed? | Existing Blackbox probes and `up` |
 | Smith resources and budgets (new) | How much is allocated, how much is used, how close is each group to its approved budget? | Approved Proxmox API metrics, guest inventory and group budgets |
 
-The health dashboard can be built immediately using the existing stack. The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](operations-and-troubleshooting.md#problems-seen-in-this-project).
+The health dashboard can be built immediately using the existing stack. The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
 
 Commands in this guide run inside noc-core from `/opt/monitoring`. Dashboard JSON files are edited on your own computer and uploaded through Grafana, just like the catalogue template. They do not need to be stored on the LXC.
 
@@ -63,7 +63,7 @@ This backup contains private configuration and target labels. Keep it on the ser
 
 ## 3. Import the health dashboard
 
-Use [service-health-dashboard-template.json](service-health-dashboard-template.json), which already contains the variables, queries and panel settings described below.
+Use [service-health-dashboard-template.json](../service-health-dashboard-template.json), which already contains the variables, queries and panel settings described below.
 
 Before importing, keep these settings on the **Probe status history** panel. They are already present in the current template:
 
@@ -291,7 +291,7 @@ The budget bars show allocation divided by the approved budget. They do not enfo
 
 ## 8. Import and verify the Smith dashboard
 
-1. Copy [smith-resources-dashboard-template.json](smith-resources-dashboard-template.json) to a local `smith-resources-dashboard.json`.
+1. Copy [smith-resources-dashboard-template.json](../smith-resources-dashboard-template.json) to a local `smith-resources-dashboard.json`.
 2. Replace the three title/description/environment placeholders. Suggested title: **Smith resources and budgets**. Explain the agreed scope and that disk allocation is reviewed inventory.
 3. Import it using the same new-dashboard procedure as step 3 and select the school's Prometheus source.
 4. Select the `group` filter. It comes from `noc_guest_info`; **All** displays separate series per group, rather than averaging percentages across groups.

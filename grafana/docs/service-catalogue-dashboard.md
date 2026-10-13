@@ -2,7 +2,7 @@
 
 This guide continues from [step 7 of service-catalogue.md](service-catalogue.md#7-create-or-reuse-the-catalogue-dashboard). Complete the target labels and Prometheus data source first. Grafana is available at `http://<noc-core-ip>:3000`, and the source uses `http://prometheus:9090`.
 
-If you do not have a catalogue dashboard yet, first create its definition using [dashboard-template.json](dashboard-template.json). The template already contains the three panels below. Copy it, replace the title, description and environment-tag placeholders, then import the finished file into Grafana. **Import creates the dashboard in Grafana.**
+If you do not have a catalogue dashboard yet, first create its definition using [dashboard-template.json](../dashboard-template.json). The template already contains the three panels below. Copy it, replace the title, description and environment-tag placeholders, then import the finished file into Grafana. **Import creates the dashboard in Grafana.**
 
 | Position | Panel | Visualisation | Why it is there |
 |---|---|---|---|
@@ -29,7 +29,7 @@ If you do not have a catalogue dashboard yet, first create its definition using 
 
 The JSON file only needs to be on your local computer, where you open Grafana in a browser. **It does not need to be copied to or stored on the LXC.** You upload it through Grafana's web interface; Grafana stores the imported dashboard in its own data volume.
 
-1. On your computer, open [dashboard-template.json](dashboard-template.json) from your local clone's `docs` folder.
+1. On your computer, open [dashboard-template.json](../dashboard-template.json) from the `grafana` folder of your local clone.
 2. Save a copy named `service-catalogue-dashboard.json` on your computer. Use a different filename if you already have a working copy you want to keep.
 3. Open that copy in a text editor.
 
@@ -41,7 +41,7 @@ Why a separate file: the supplied template remains a starting point, while your 
 
 ## 3. Edit the dashboard file
 
-Replace the `<your ... here>` placeholders in your working copy before importing it. The panel queries and data-source mapping are already configured. The excerpts below show the existing code in [dashboard-template.json](dashboard-template.json) and explain the required text changes and optional presentation changes.
+Replace the `<your ... here>` placeholders in your working copy before importing it. The panel queries and data-source mapping are already configured. The excerpts below show the existing code in [dashboard-template.json](../dashboard-template.json) and explain the required text changes and optional presentation changes.
 
 ### Dashboard name and description
 

@@ -258,11 +258,11 @@ This should return no rows. One guest must have one current identity series. Res
 Copy the supplied template **once**, then edit your local copy:
 
 ```bash
-cp docs/smith-resource-rules-template.yml prometheus/rules/smith-resources.yml
+cp grafana/docs/smith-resource-rules-template.yml prometheus/rules/smith-resources.yml
 nano prometheus/rules/smith-resources.yml
 ```
 
-If that local file already exists, edit it directly. The template is not a valid live rules file until you replace all placeholders. Its location in `docs/` keeps it outside the current `/etc/prometheus/rules/*.yml` glob.
+If that local file already exists, edit it directly. The template is not a valid live rules file until you replace all placeholders. Its location in `grafana/docs/` keeps it outside the current `/etc/prometheus/rules/*.yml` glob.
 
 Complete the sections in this order:
 

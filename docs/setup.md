@@ -239,9 +239,9 @@ First login is `admin` / `admin`. Grafana makes you set a new password right awa
 - Grafana reports that it successfully queried the Prometheus API.
 - In *Explore*, select the Prometheus data source and run `up`. You should see one series per target, with the value `1`.
 
-Anything you build or import in the UI lives in the `grafana_data` volume. The repo supplies manual-import templates for the [service catalogue](service-catalogue-dashboard.md) and [health/resource dashboards](health-and-usage-dashboards.md); automatic file provisioning is still planned.
+Anything you build or import in the UI lives in the `grafana_data` volume. The repo supplies manual-import templates for the [service catalogue](../grafana/docs/service-catalogue-dashboard.md) and [health/resource dashboards](../grafana/docs/health-and-usage-dashboards.md); automatic file provisioning is still planned.
 
-When setting up the health dashboard, use the current template with **Max data points 200** and **Min interval 30s** on Probe status history. These settings prevent the automatic resolution from requesting too many status cells. The [health-dashboard import step](health-and-usage-dashboards.md#3-import-the-health-dashboard) checks this immediately; the manual panel instructions set it before saving. [Step 4](health-and-usage-dashboards.md#4-configure-the-filters-also-used-when-building-manually) gives the current paths to dashboard settings and variables.
+When setting up the health dashboard, use the current template with **Max data points 200** and **Min interval 30s** on Probe status history. These settings prevent the automatic resolution from requesting too many status cells. The [health-dashboard import step](../grafana/docs/health-and-usage-dashboards.md#3-import-the-health-dashboard) checks this immediately; the manual panel instructions set it before saving. [Step 4](../grafana/docs/health-and-usage-dashboards.md#4-configure-the-filters-also-used-when-building-manually) gives the current paths to dashboard settings and variables.
 
 ---
 

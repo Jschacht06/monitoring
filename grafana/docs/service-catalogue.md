@@ -1,6 +1,6 @@
 # Service catalogue in Grafana
 
-This guide continues the clean installation in [setup.md](setup.md), adding a Grafana dashboard that lists every monitored service, its owner, dependencies and contact person. Each step ends with a check that tells you what you should see before you continue.
+This guide continues the clean installation in [setup.md](../../docs/setup.md), adding a Grafana dashboard that lists every monitored service, its owner, dependencies and contact person. Each step ends with a check that tells you what you should see before you continue.
 
 All commands run as root inside the Debian 13 LXC, from the stack folder:
 
@@ -25,7 +25,7 @@ Placeholders used in this guide:
 
 ## 1. Prerequisites
 
-On each clean Debian 13 LXC, first follow [setup.md](setup.md) through step 8. That installs the tools, clones the repo into `/opt/monitoring`, prepares the Compose and Alertmanager configuration, starts the stack and creates the Prometheus data source. Continue here after those checks pass. The catalogue guide assumes sufficient resources and does not repeat the server installation.
+On each clean Debian 13 LXC, first follow [setup.md](../../docs/setup.md) through step 8. That installs the tools, clones the repo into `/opt/monitoring`, prepares the Compose and Alertmanager configuration, starts the stack and creates the Prometheus data source. Continue here after those checks pass. The catalogue guide assumes sufficient resources and does not repeat the server installation.
 
 The base setup also copies `prometheus/template.yml` to `prometheus/prometheus.yml`. The latter is now an ignored local configuration file. On an existing installation, keep your current copy and integrate new template settings into it; copy the template only when creating a configuration for the first time.
 
@@ -109,7 +109,7 @@ If you already followed setup.md, its `noc.yml` puts both endpoints in one `noc-
 
 Keep `noc` and `noc-core` consistent with the existing internal target labels. The URLs use Compose service names because Blackbox probes them over the Docker network. Your browser still uses the LXC IP.
 
-Real target files are ignored by Git, as explained in [adding-targets.md](adding-targets.md). Leave the tracked `template.yml` as a template.
+Real target files are ignored by Git, as explained in [adding-targets.md](../../docs/adding-targets.md). Leave the tracked `template.yml` as a template.
 
 **Check:** in Grafana *Explore* or the Prometheus query box, run:
 
@@ -123,7 +123,7 @@ After discovery and a few scrape cycles, both targets should return `1`. Expand 
 
 ## 3. Add the school services
 
-Use one file per group, as in [adding-targets.md](adding-targets.md#how-to-organise-the-files):
+Use one file per group, as in [adding-targets.md](../../docs/adding-targets.md#how-to-organise-the-files):
 
 ```bash
 cp prometheus/targets/template.yml prometheus/targets/group-a.yml
@@ -181,7 +181,7 @@ This proves that the TCP port accepts a connection. It does not test a login or 
     dependencies: '<dependencies>'
 ```
 
-> **Only add ICMP for hosts that reliably answer ping.** The existing inhibit rule suppresses HTTP ServiceDown alerts while the same host's ICMP ServiceDown alert is firing. Check the ping result before relying on it. See [combining ICMP and HTTP](adding-targets.md#combining-icmp-and-http-for-one-host).
+> **Only add ICMP for hosts that reliably answer ping.** The existing inhibit rule suppresses HTTP ServiceDown alerts while the same host's ICMP ServiceDown alert is firing. Check the ping result before relying on it. See [combining ICMP and HTTP](../../docs/adding-targets.md#combining-icmp-and-http-for-one-host).
 
 Probes run from Blackbox, so the endpoints must be reachable from the monitoring LXC. `localhost` in a probe target means Blackbox itself.
 
@@ -236,7 +236,7 @@ Why: the dashboard uses all `up` series so an unlabeled internal job is not sile
 
 `localhost:9090` is correct for Prometheus's self-scrape: that request runs inside Prometheus. It is different from a destination probed by Blackbox.
 
-For another host's Node Exporter, add the same catalogue labels to its static target block too. Keep its `host` value equal to that host's probes, as described in [how-to-guides.md](how-to-guides.md#add-node_exporter-for-another-host).
+For another host's Node Exporter, add the same catalogue labels to its static target block too. Keep its `host` value equal to that host's probes, as described in [how-to-guides.md](../../docs/how-to-guides.md#add-node_exporter-for-another-host).
 
 ### Optional drive-health exporter
 
@@ -255,7 +255,7 @@ If you enabled the Prometheus template's optional `smartctl` job, add all six ca
           dependencies: 'external:docker'
 ```
 
-Replace the placeholders and set dependencies to match how the exporter is actually installed. Use the same `host` label as that machine's Node Exporter so the drive and host alerts stay aligned. Update an enabled job rather than creating a duplicate; leave the optional job commented out if you are not collecting drive health. The installation steps are in [how-to-guides.md](how-to-guides.md#add-smartctl_exporter-for-drive-health).
+Replace the placeholders and set dependencies to match how the exporter is actually installed. Use the same `host` label as that machine's Node Exporter so the drive and host alerts stay aligned. Update an enabled job rather than creating a duplicate; leave the optional job commented out if you are not collecting drive health. The installation steps are in [how-to-guides.md](../../docs/how-to-guides.md#add-smartctl_exporter-for-drive-health).
 
 **Check:**
 
@@ -276,7 +276,7 @@ docker compose kill -s SIGHUP prometheus
 docker compose logs --since 2m prometheus
 ```
 
-`SIGHUP` reloads the configuration without restarting the container. It does not need `--web.enable-lifecycle`. The restart procedure in [operations-and-troubleshooting.md](operations-and-troubleshooting.md#how-to-apply-a-change) is also an option after validation.
+`SIGHUP` reloads the configuration without restarting the container. It does not need `--web.enable-lifecycle`. The restart procedure in [operations-and-troubleshooting.md](../../docs/operations-and-troubleshooting.md#how-to-apply-a-change) is also an option after validation.
 
 **Check:** after a few 30-second scrape cycles, in grafana (in the explore tab), query:
 
@@ -304,7 +304,7 @@ Why the service name: Grafana reaches Prometheus over the Docker network. `local
 
 ## 7. Create or reuse the catalogue dashboard
 
-If you do not have a catalogue dashboard yet, start with [service-catalogue-dashboard.md](service-catalogue-dashboard.md#1-choose-how-to-create-the-dashboard). It explains how to create the dashboard definition before importing it. The ready-made definition is in [dashboard-template.json](dashboard-template.json), a separate file you can copy and edit.
+If you do not have a catalogue dashboard yet, start with [service-catalogue-dashboard.md](service-catalogue-dashboard.md#1-choose-how-to-create-the-dashboard). It explains how to create the dashboard definition before importing it. The ready-made definition is in [dashboard-template.json](../dashboard-template.json), a separate file you can copy and edit.
 
 Follow this sequence in the dashboard guide:
 
@@ -341,7 +341,7 @@ count by (group, service, host, owner, contact, dependencies) (up)
 | `count by (...)` | Counts checks that share all six labels | Several checks of the same service become one row when their metadata agrees. |
 | Checks column | The resulting count | It counts configured checks, not healthy checks. |
 
-For destination health, use `probe_success`, as explained in [up vs probe_success](adding-targets.md#up-vs-probe_success). A blackbox check can have `up=1` and `probe_success=0`.
+For destination health, use `probe_success`, as explained in [up vs probe_success](../../docs/adding-targets.md#up-vs-probe_success). A blackbox check can have `up=1` and `probe_success=0`.
 
 If you build or adjust the table manually, use these [query options](https://grafana.com/docs/grafana/latest/datasources/prometheus/query-editor/):
 
@@ -439,7 +439,7 @@ Changes to metadata create new time series, because labels are part of a series'
 | Symptom | Cause | Fix |
 |---|---|---|
 | New service does not appear | File does not match `targets/*.yml`, YAML is invalid, or discovery has not completed | Check filename and logs: `docker compose logs --since 5m prometheus`. Verify the active target list. |
-| Probe is listed but fails | Wrong endpoint/module, destination issue or network access | Check `probe_success` and follow [adding-targets.md](adding-targets.md#after-saving). |
+| Probe is listed but fails | Wrong endpoint/module, destination issue or network access | Check `probe_success` and follow [adding-targets.md](../../docs/adding-targets.md#after-saving). |
 | Missing-metadata count is greater than 0 | At least one probe/static target lacks a required label | Run the missing-label query from step 9 and complete that target's labels. |
 | Same service appears twice | Owner/contact/dependencies differ between its checks | Run the conflict query and align all six labels. |
 | Lots of rows for the same check | Query is Range or Both instead of Instant | Set Type to Instant and Format to Table. |
@@ -461,6 +461,6 @@ Only run the reload after validation succeeds. Restore specific edited target fi
 Next steps:
 
 - [service-catalogue-dashboard.md](service-catalogue-dashboard.md): create, edit, export and import the dashboard
-- [dashboard-template.json](dashboard-template.json): ready-made dashboard definition to copy and customise
-- [adding-targets.md](adding-targets.md): probe formats, diagnosis and ICMP/HTTP inhibition
-- [operations-and-troubleshooting.md](operations-and-troubleshooting.md): stack operations and applying configuration changes
+- [dashboard-template.json](../dashboard-template.json): ready-made dashboard definition to copy and customise
+- [adding-targets.md](../../docs/adding-targets.md): probe formats, diagnosis and ICMP/HTTP inhibition
+- [operations-and-troubleshooting.md](../../docs/operations-and-troubleshooting.md): stack operations and applying configuration changes
