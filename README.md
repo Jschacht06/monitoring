@@ -58,6 +58,7 @@ Tested end to end:
 - **Host metrics for the Proxmox host** (node_exporter, Debian package): filesystems including ZFS pools and per-LXC volumes, CPU/NVMe/NIC temperatures and ZFS pool health.
 - **Drive health** through smartctl_exporter (SMART status and drive temperatures of the physical drives).
 - **Alerts for drives, ZFS and temperatures**: `SmartStatusFailed`, `DriveNotReadable`, `ZfsPoolNotOnline` and five temperature alerts (`HostTemperatureHigh`/`Critical`, `NvmeTemperatureHigh`, `DriveTemperatureHigh`/`Critical`). All were tested by flipping their condition, with the firing and resolved emails. `DriveNotReadable` fired for a real faulted drive.
+- **Proxmox guests** through pve-exporter (read-only API token): the status of every VM and LXC. Guests are chosen with Proxmox tags: `monitored-critical` (critical alert after 2 minutes) and `monitored-warning` (warning alert after 5 minutes). Both alerts were tested end to end on a stopped LXC, with the firing and resolved emails. See [docs/how-to-guides.md](docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter).
 - **Flip test**: a way to prove an alert end to end without breaking anything, see [docs/how-to-guides.md](docs/how-to-guides.md#test-an-alert-by-flipping-its-condition).
 - **Grafana** with Prometheus as a data source (added by hand).
 - **Service catalogue documentation and dashboard template**: ownership, contacts and dependencies; see [docs/service-catalogue.md](docs/service-catalogue.md).
@@ -74,7 +75,6 @@ Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tri
 
 - Loki for logs
 - Public or internal status page
-- Proxmox API exporter (per-LXC/VM metrics and quotas)
 - Grafana dashboards as code (provisioning)
 - Backup and restore of Prometheus, Grafana and Alertmanager data
 - Automated deployment with Ansible/Terraform
@@ -90,9 +90,11 @@ cp compose-template.yaml compose.yaml
 nano compose.yaml                      # replace <your-host> with the noc-core IP (twice)
 cp prometheus/template.yml prometheus/prometheus.yml
 cp alertmanager/template.yml alertmanager/alertmanager.yml
+cp pve/template.yml pve/pve.yml
+nano pve/pve.yml                       # Proxmox API token, or delete the pve-exporter service from compose.yaml
 nano alertmanager/alertmanager.yml     # fill in SMTP settings and recipients
 docker compose up -d
-docker compose ps                      # all five services should be "Up"
+docker compose ps                      # all six services should be "Up"
 ```
 
 Then open Prometheus on `http://<noc-core-ip>:9090`, Grafana on `http://<noc-core-ip>:3000` and Alertmanager on `http://<noc-core-ip>:9093`.
@@ -114,7 +116,7 @@ The quick start does not add any probe targets yet. Add your first target file a
 │   ├── template.yml              # Prometheus config template; copy to prometheus.yml (ignored by Git) and edit the copy
 │   ├── prometheus.yml            # Your own copy: scrape jobs, rule files, Alertmanager address (ignored by Git, holds host IPs)
 │   ├── rules/
-│   │   └── alerts.yml            # All alert rules (availability, capacity, drives, storage, hardware, monitoring-health)
+│   │   └── alerts.yml            # All alert rules (availability, capacity, drives, storage, hardware, proxmox, monitoring-health)
 │   └── targets/
 │       └── template.yml          # Template for probe target files; real files (*.yml) are ignored by Git
 └── docs/

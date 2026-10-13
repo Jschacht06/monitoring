@@ -43,6 +43,27 @@ scrape_configs:
   #         host: <host-ip>
   #         group: noc
 
+  # Optional: pve-exporter (Proxmox API: status of every VM and LXC). Uncomment, fill in the
+  # Proxmox IP and see docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter
+  # - job_name: pve
+  #   metrics_path: /pve
+  #   params:
+  #     module: [default]
+  #     cluster: ['1']
+  #     node: ['1']
+  #   static_configs:
+  #     - targets: ['<proxmox-ip>']
+  #       labels:
+  #         host: <proxmox-ip>
+  #         group: noc
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: __param_target
+  #     - source_labels: [__param_target]
+  #       target_label: instance
+  #     - target_label: __address__
+  #       replacement: pve-exporter:9221
+
   # Probes: do not add targets here. Add them in targets/*.yml
   - job_name: blackbox
     metrics_path: /probe

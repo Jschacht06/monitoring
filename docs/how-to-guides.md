@@ -19,6 +19,7 @@ Contents:
 - [Add another email receiver or change the recipients](#add-another-email-receiver-or-change-the-recipients)
 - [Add node_exporter for another host](#add-node_exporter-for-another-host)
 - [Add smartctl_exporter for drive health](#add-smartctl_exporter-for-drive-health)
+- [Monitor Proxmox guests with pve-exporter](#monitor-proxmox-guests-with-pve-exporter)
 - [Test an alert by flipping its condition](#test-an-alert-by-flipping-its-condition)
 - [Move the SMTP password into a secret file](#move-the-smtp-password-into-a-secret-file)
 
@@ -35,6 +36,7 @@ Status of the recipes on this setup:
 | Add another email receiver or change the recipients | A second recipient is tested; the per-group route is **untested** |
 | Add node_exporter for another host | Debian package on the Proxmox host: tested. Docker on another host and the firewall steps: **untested** |
 | Add smartctl_exporter for drive health | Tested on the Proxmox host (Debian 13 package from backports) |
+| Monitor Proxmox guests with pve-exporter | Tested on the Proxmox host (read-only token, exporter, job UP, both tag alerts fired and resolved) |
 | Test an alert by flipping its condition | Tested (used for the drive, ZFS and temperature alerts) |
 | Move the SMTP password into a secret file | **Untested** |
 
@@ -678,6 +680,111 @@ Verify:
 ### 5. Restrict the port
 
 The exporter has no authentication, like node_exporter. Restrict port 9633 to noc-core in the same way as port 9100, see [step 2 of the node_exporter recipe](#2-restrict-port-9100-to-the-noc). The same limits apply.
+
+---
+
+## Monitor Proxmox guests with pve-exporter
+
+pve-exporter reads the Proxmox API with a **read-only token** and exposes the status of every VM and LXC (running or stopped, CPU, memory, storage). node_exporter cannot see this, because VMs and other LXCs are invisible from inside noc-core.
+
+You choose which guests to watch with **tags in Proxmox**, so there is no list file to maintain:
+
+| Tag | Meaning | Alert |
+|---|---|---|
+| `monitored-critical` | Must always run (remote access, databases, game server) | `PveCriticalGuestNotRunning`: critical email after 2 minutes |
+| `monitored-warning` | Matters, but is not urgent | `PveGuestNotRunning`: warning email after 5 minutes |
+
+Give a guest only one of the two tags. Guests without a tag are never alerted on, so a VM you stop on purpose causes no email.
+
+### 1. Create a read-only user and token
+
+On the Proxmox host shell:
+
+```bash
+pveum user add prometheus@pve --comment "Read-only monitoring"
+pveum aclmod / --users prometheus@pve --roles PVEAuditor
+pveum user token add prometheus@pve exporter --privsep 0
+```
+
+Or in the web UI (Datacenter): *Permissions → Users → Add* (realm *Proxmox VE authentication server*, no password needed), then *Permissions → Add → User Permission* (path `/`, role `PVEAuditor`), then *Permissions → API Tokens → Add* (user `prometheus@pve`, Token ID `exporter`, **untick Privilege Separation**).
+
+- `PVEAuditor` is the built-in read-only role: it can look at everything and change nothing.
+- The user has no password on purpose. It only exists to own the token, so nobody can log in with it.
+- The token **secret is shown only once**. Store it in a password manager. Never paste it in chat, a screenshot or Git.
+
+### 2. Test the token
+
+On the Proxmox host. `read -rs` waits silently: type the command, press Enter, then paste the secret and press Enter again.
+
+```bash
+read -rs PVE_SECRET
+curl -sk -H 'Authorization: PVEAPIToken=prometheus@pve!exporter='"$PVE_SECRET" \
+  https://<proxmox-ip>:8006/api2/json/version; echo
+unset PVE_SECRET
+```
+
+Expected: `{"data":{"version":"9.x.x",...}}`. `401` means a wrong secret or token name. Use single quotes around the header: in double quotes bash treats the `!` as history expansion and prints `event not found`.
+
+### 3. Create `pve/pve.yml`
+
+```bash
+mkdir -p pve
+cp pve/template.yml pve/pve.yml
+nano pve/pve.yml                 # fill in user, token name and the token secret
+```
+
+With the commands above the values are `prometheus@pve`, `exporter` and the secret. `pve/pve.yml` is ignored by Git, because it holds the secret. `verify_ssl: false` is needed while Proxmox uses its self-signed certificate.
+
+### 4. Start the exporter
+
+The `pve-exporter` service is part of `compose-template.yaml`. If your `compose.yaml` was copied before it was added, copy the service block over. Create `pve/pve.yml` **before** starting it: if the file is missing, Docker creates a folder with that name and the exporter fails. Then:
+
+```bash
+docker compose up -d pve-exporter
+docker compose logs --tail 20 pve-exporter
+```
+
+If the log says `permission denied` for `pve.yml`, the container user cannot read the file: run `chmod 644 pve/pve.yml` (the file only exists on noc-core). If you do not use Proxmox, delete the `pve-exporter` service from your `compose.yaml`.
+
+### 5. Test the exporter
+
+```bash
+curl -s 'http://127.0.0.1:9221/pve?target=<proxmox-ip>&cluster=1&node=1' | grep -E '^pve_(up|guest_info)' | head
+```
+
+You should see one `pve_up` and one `pve_guest_info` line per guest. The published port is bound to `127.0.0.1`, so it is only reachable from noc-core itself.
+
+### 6. Add the job to Prometheus
+
+Uncomment the `pve` job in your `prometheus/prometheus.yml` (it is in `prometheus/template.yml`) and fill in the Proxmox IP, then:
+
+```bash
+docker compose exec prometheus promtool check config /etc/prometheus/prometheus.yml
+docker compose restart prometheus
+```
+
+Under *Status → Targets* the `pve` job should be UP. It works like the Blackbox job: the target is the Proxmox host, and the `relabel_configs` send the scrape to `pve-exporter:9221` instead. `MonitoringCheckFailed` already covers the `pve` job, so you get an alert if the exporter loses access (deleted token, stopped container, host unreachable).
+
+### 7. Tag the guests
+
+In the Proxmox web UI, select a guest and click the tag pencil next to its name, then add `monitored-critical` or `monitored-warning`. Tags are read on the next scrape (up to 30 seconds). Check which guests are picked up:
+
+```promql
+pve_guest_info{tags=~"(.*;)?monitored-critical(;.*)?"}
+pve_guest_info{tags=~"(.*;)?monitored-warning(;.*)?"}
+```
+
+A guest with several tags has them joined with `;` in the `tags` label, which the regex handles.
+
+### 8. Test the alerts
+
+Give a **stopped** guest the tag and wait: `PveCriticalGuestNotRunning` fires after about 3 minutes, `PveGuestNotRunning` after about 7 to 8 minutes. Remove the tag and wait for the resolved email (up to 5 minutes for critical, up to 15 for warning, because of `group_interval`). Both were tested this way.
+
+### Limits
+
+- A guest you **delete** disappears from the API, so it does not alert. Remove its tag first if you decommission it on purpose.
+- The tags cover guests only. The Proxmox host itself is covered by node_exporter and `MonitoringCheckFailed`.
+- `verify_ssl: false` accepts any certificate on the way to Proxmox. That is acceptable on a trusted LAN. Install a real certificate on Proxmox and set `verify_ssl: true` to harden it..
 
 ---
 

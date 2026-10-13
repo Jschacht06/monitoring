@@ -70,6 +70,7 @@ groups:
         annotations:
           summary: "Drive {{ $labels.device }} on {{ $labels.host }} reports SMART failure"
           description: "The SMART health check of {{ $labels.device }} on {{ $labels.host }} failed. Check `smartctl -a /dev/{{ $labels.device }}` and back up the data."
+          runbook: "SmartStatusFailed: 1) run smartctl -a /dev/<device> on the host, 2) check the pool that uses the drive (zpool status), 3) back up now and plan to replace the drive."
       - alert: DriveDisappeared
         expr: (smartctl_device_smart_status offset 1d) unless on(device, host) smartctl_device_smart_status
         for: 5m
@@ -78,6 +79,7 @@ groups:
         annotations:
           summary: "Drive {{ $labels.device }} on {{ $labels.host }} no longer reports SMART data"
           description: "{{ $labels.device }} on {{ $labels.host }} reported SMART data 24 hours ago but not now. It may have failed, been unplugged or lost its connection."
+          runbook: "DriveDisappeared: 1) run lsblk and dmesg on the host, 2) check the SATA cable and power, 3) check the pool that used the drive (zpool status)."
       - alert: DriveNotReadable
         expr: node_disk_info{device=~"sd[a-z]"} and on(host) (up{job="smartctl"} == 1) unless on(device, host) smartctl_device_smart_status
         for: 5m
@@ -86,6 +88,7 @@ groups:
         annotations:
           summary: "Drive {{ $labels.device }} on {{ $labels.host }} is visible but SMART data cannot be read"
           description: "The OS lists {{ $labels.device }} on {{ $labels.host }}, but the smartctl exporter returns no data for it. The drive or its connection may have failed."
+          runbook: "DriveNotReadable: 1) run smartctl -i /dev/<device> and dmesg on the host, 2) check the SATA cable and power, 3) check the pool that uses the drive (zpool status)."
   - name: storage
     rules:
       - alert: ZfsPoolNotOnline
@@ -96,6 +99,7 @@ groups:
         annotations:
           summary: "ZFS pool {{ $labels.zpool }} on {{ $labels.host }} is not online"
           description: "Pool {{ $labels.zpool }} on {{ $labels.host }} left the online state (degraded, faulted, offline or unavailable). Check `zpool status {{ $labels.zpool }}` on the host."
+          runbook: "ZfsPoolNotOnline: 1) run zpool status <pool> on the host, 2) find the degraded or faulted device, 3) check cables and drive health, replace the drive if needed."
 
 # temperature checks
   - name: hardware
@@ -108,6 +112,7 @@ groups:
         annotations:
           summary: "CPU temperature on {{ $labels.host }} is high ({{ $value }} °C)"
           description: "Sensor {{ $labels.sensor }} on {{ $labels.chip }} has been above 90 °C for 5 minutes on {{ $labels.host }}. Check cooling, dust and load."
+          runbook: "HostTemperatureHigh: 1) check airflow, fans and dust, 2) check what causes the load (top, running guests), 3) if it keeps happening, check the room temperature and the cooler."
 
       - alert: HostTemperatureCritical
         expr: node_hwmon_temp_celsius{chip=~"platform_coretemp_.*"} > 95
@@ -117,6 +122,7 @@ groups:
         annotations:
           summary: "CPU temperature on {{ $labels.host }} is critical ({{ $value }} °C)"
           description: "Sensor {{ $labels.sensor }} on {{ $labels.chip }} is above 95 °C on {{ $labels.host }}. Throttling or shutdown is close."
+          runbook: "HostTemperatureCritical: 1) check airflow, fans and dust, 2) check what causes the load (top, running guests), 3) if it keeps happening, check the room temperature and the cooler."
 
       - alert: NvmeTemperatureHigh
         expr: node_hwmon_temp_celsius{chip=~"nvme_.*"} > 70
@@ -126,6 +132,7 @@ groups:
         annotations:
           summary: "NVMe temperature on {{ $labels.host }} is high ({{ $value }} °C)"
           description: "Sensor {{ $labels.sensor }} on {{ $labels.chip }} has been above 70 °C for 5 minutes on {{ $labels.host }}."
+          runbook: "NvmeTemperatureHigh: 1) check airflow, fans and dust, 2) check what causes the load (top, running guests), 3) if it keeps happening, check the room temperature and the cooler."
 
       - alert: DriveTemperatureHigh
         expr: smartctl_device_temperature{temperature_type="current", device!~"nvme.*"} > 50
@@ -135,6 +142,7 @@ groups:
         annotations:
           summary: "Drive {{ $labels.device }} on {{ $labels.host }} is hot ({{ $value }} °C)"
           description: "{{ $labels.device }} on {{ $labels.host }} has been above 50 °C for 5 minutes. Check airflow and fans."
+          runbook: "DriveTemperatureHigh: 1) check airflow, fans and dust, 2) check what causes the load (top, running guests), 3) if it keeps happening, check the room temperature and the cooler."
 
       - alert: DriveTemperatureCritical
         expr: smartctl_device_temperature{temperature_type="current", device!~"nvme.*"} > 60
@@ -144,6 +152,7 @@ groups:
         annotations:
           summary: "Drive {{ $labels.device }} on {{ $labels.host }} is overheating ({{ $value }} °C)"
           description: "{{ $labels.device }} on {{ $labels.host }} is above 60 °C. Risk of damage; check airflow and fans now."
+          runbook: "DriveTemperatureCritical: 1) check airflow, fans and dust, 2) check what causes the load (top, running guests), 3) if it keeps happening, check the room temperature and the cooler."
 
 
 # Proxmox guests (VMs and LXCs)

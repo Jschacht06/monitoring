@@ -173,7 +173,7 @@ Real target files are ignored by Git, because they contain internal addresses. T
 docker compose up -d
 ```
 
-`-d` runs the containers in the background. Compose creates the five services and three named volumes:
+`-d` runs the containers in the background. Compose creates the six services and three named volumes:
 
 | Service | Image | Port on noc-core |
 |---|---|---|
@@ -182,6 +182,7 @@ docker compose up -d
 | blackbox | `prom/blackbox-exporter:v0.28.0` | none (internal, 9115) |
 | alertmanager | `prom/alertmanager:v0.34.1` | 9093 |
 | node-exporter | `prom/node-exporter:v1.12.1` | none (internal, 9100) |
+| pve-exporter | `prompve/prometheus-pve-exporter:3.10.1` | none (127.0.0.1:9221 for tests; needs `pve/pve.yml`, see the [how-to](how-to-guides.md#monitor-proxmox-guests-with-pve-exporter)) |
 
 **Check:**
 
@@ -192,7 +193,7 @@ docker compose exec prometheus promtool check rules /etc/prometheus/rules/alerts
 docker compose exec alertmanager amtool check-config /etc/alertmanager/alertmanager.yml
 ```
 
-- `ps`: all five services have the status `Up` (not `Restarting`).
+- `ps`: all six services have the status `Up` (not `Restarting`).
 - `promtool check config`: `SUCCESS`, and it finds 1 rule file.
 - `promtool check rules`: `SUCCESS: 5 rules found`.
 - `amtool check-config`: `SUCCESS`, and it lists 4 receivers and 1 inhibit rule.

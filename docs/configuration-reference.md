@@ -6,6 +6,7 @@ This page explains every config file in the repo: what each setting does and **w
 |---|---|---|
 | `compose.yaml` (from `compose-template.yaml`) | Docker Compose | Template only |
 | `prometheus/prometheus.yml` (from `prometheus/template.yml`) | Prometheus | Template only (holds the IP addresses of your hosts) |
+| `pve/pve.yml` (from `pve/template.yml`) | pve-exporter | Template only (holds the Proxmox API token secret) |
 | `prometheus/rules/alerts.yml` | Prometheus | Yes |
 | `prometheus/targets/*.yml` | Prometheus (file_sd) | Template only |
 | `blackbox/blackbox.yml` | Blackbox Exporter | Yes |
@@ -103,6 +104,31 @@ noc-core is an LXC and shares the Proxmox host's kernel, so its node_exporter al
 ```
 
 Scrapes smartctl_exporter on a physical host, for drive health and drive temperature. It is commented out in the template because it needs a host with real drives. Use the same `host` value as the `node` job for the same machine: `DriveNotReadable` compares both exporters by `host`. Setup: [how-to-guides.md](how-to-guides.md#add-smartctl_exporter-for-drive-health).
+
+#### Job `pve` (optional)
+
+```yaml
+  # - job_name: pve
+  #   metrics_path: /pve
+  #   params:
+  #     module: [default]
+  #     cluster: ['1']
+  #     node: ['1']
+  #   static_configs:
+  #     - targets: ['<proxmox-ip>']
+  #       labels:
+  #         host: <proxmox-ip>
+  #         group: noc
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: __param_target
+  #     - source_labels: [__param_target]
+  #       target_label: instance
+  #     - target_label: __address__
+  #       replacement: pve-exporter:9221
+```
+
+Scrapes the Proxmox API through pve-exporter, for the status of every VM and LXC. It works like the `blackbox` job: the target is the Proxmox host, and the relabeling sends the scrape to `pve-exporter:9221` with the host as `?target=`. `module: [default]` selects the credentials block in `pve/pve.yml`, and `cluster` and `node` switch on the cluster and node collectors. Use the same `host` value as the `node` job, so alerts for the same machine are grouped together. Setup: [how-to-guides.md](how-to-guides.md#monitor-proxmox-guests-with-pve-exporter).
 
 #### Job `blackbox`
 
@@ -222,7 +248,7 @@ docker compose exec blackbox blackbox_exporter --config.check --config.file=/etc
 
 ## prometheus/rules/alerts.yml
 
-All rules are in one file, in six groups. Every alert has:
+All rules are in one file, in seven groups. Every alert has:
 
 - `labels.severity`: what Alertmanager routes on (`critical` or `warning`).
 - `annotations.summary` / `description`: the text in the email. `{{ $labels.x }}` inserts a label of the failing series, and `{{ $value }}` the value of the expression.
@@ -246,6 +272,8 @@ All rules are in one file, in six groups. Every alert has:
 | DriveTemperatureHigh | hardware | warning | 5m | Tested (firing and resolved) |
 | DriveTemperatureCritical | hardware | critical | 2m | Tested (firing and resolved) |
 | MonitoringCheckFailed | monitoring-health | critical | 2m | Tested |
+| PveCriticalGuestNotRunning | proxmox | critical | 2m | Tested (firing and resolved) |
+| PveGuestNotRunning | proxmox | warning | 5m | Tested (firing and resolved) |
 
 The drive, ZFS and temperature rules only produce results where the matching exporter exists (smartctl_exporter, or node_exporter on a host with ZFS or sensors). Without them they stay inactive and do no harm. They were tested by [flipping their condition](how-to-guides.md#test-an-alert-by-flipping-its-condition).
 
@@ -310,14 +338,14 @@ for: 30m
 ### MonitoringCheckFailed
 
 ```yaml
-expr: up{job=~"node|blackbox|smartctl"} == 0
+expr: up{job=~"node|blackbox|smartctl|pve"} == 0
 for: 2m
 ```
 
-- **Detects:** Prometheus cannot scrape node_exporter, smartctl_exporter or the Blackbox Exporter. The monitoring is blind: probe and disk metrics stop, so `ServiceDown` and `DiskSpaceLow` **cannot** fire.
-- **In plain language:** "a scrape of the `node`, `blackbox` or `smartctl` job failed". For `blackbox`, there is one `up` series per target. If the Blackbox container dies, it fires for every target.
+- **Detects:** Prometheus cannot scrape node_exporter, smartctl_exporter, pve-exporter or the Blackbox Exporter. The monitoring is blind: probe and disk metrics stop, so `ServiceDown` and `DiskSpaceLow` **cannot** fire.
+- **In plain language:** "a scrape of the `node`, `blackbox`, `smartctl` or `pve` job failed". For `blackbox`, there is one `up` series per target. If the Blackbox container dies, it fires for every target.
 - **Note:** `up{job="blackbox"} == 1` while the website is down is normal. See [up vs probe_success](adding-targets.md#up-vs-probe_success).
-- **What to change:** add more jobs to the regex when you add exporters (for example `node|blackbox|smartctl|proxmox`). For a remote node_exporter host, a powered-off host also triggers this alert. You can suppress that with an inhibit rule, see [how-to-guides.md](how-to-guides.md#add-or-change-an-inhibit-rule).
+- **What to change:** add more jobs to the regex when you add exporters (for example `node|blackbox|smartctl|pve|loki`). For a remote node_exporter host, a powered-off host also triggers this alert. You can suppress that with an inhibit rule, see [how-to-guides.md](how-to-guides.md#add-or-change-an-inhibit-rule).
 
 ### Drives
 
@@ -416,6 +444,25 @@ smartctl_device_temperature{host="<host-ip>"}    # drive temperatures
 ```
 
 Set the warning above your normal peak and the critical alert a few degrees below the chip's critical limit. Ignore limits that look absurd (such as `65261.85`): they mean "not set".
+
+---
+
+### Proxmox guests
+
+#### PveCriticalGuestNotRunning and PveGuestNotRunning
+
+```yaml
+expr: pve_guest_info{tags=~"(.*;)?monitored-critical(;.*)?"} and on(id) (pve_up == 0)   # critical, for: 2m
+expr: pve_guest_info{tags=~"(.*;)?monitored-warning(;.*)?"} and on(id) (pve_up == 0)    # warning, for: 5m
+```
+
+- **Detects:** a VM or LXC that carries the Proxmox tag `monitored-critical` (or `monitored-warning`) but is not running.
+- **In plain language:** "take the guests with this tag, keep those that Proxmox reports as stopped". `pve_guest_info` has the guest's name, ID and tags and is always 1. `pve_up` is 1 for a running guest and 0 for a stopped one. `and on(id)` joins them by guest ID, so the alert keeps the `name` label for the email.
+- **Why tags:** the list of guests to watch lives in Proxmox, next to the guest. Tag a guest and it is monitored on the next scrape, with no file to edit and no Prometheus restart. Guests you stop on purpose and never tagged cause no alerts.
+- **The regex:** Proxmox joins several tags with `;` in the `tags` label. `(.*;)?monitored-critical(;.*)?` matches the exact tag at the start, middle or end, and does not match a tag that only starts with the same letters.
+- **When the exporter is down:** `pve_up` disappears, so these alerts stay quiet and `MonitoringCheckFailed` fires instead (job `pve`).
+- **Limits:** a guest deleted from Proxmox disappears from the API and does not alert. A guest tagged with both tags fires both alerts. A typo in the tag means no monitoring: check with `pve_guest_info{tags=~".*monitored.*"}`.
+- **Status:** tested (firing and resolved emails for both alerts, on a stopped LXC).
 
 ---
 
@@ -563,13 +610,14 @@ The repo tracks `compose-template.yaml`. Copy it to `compose.yaml` (ignored by G
 | blackbox | `prom/blackbox-exporter:v0.28.0` |
 | alertmanager | `prom/alertmanager:v0.34.1` |
 | node-exporter | `prom/node-exporter:v1.12.1` |
+| pve-exporter | `prompve/prometheus-pve-exporter:3.10.1` |
 
 Why pinned, not `latest`: a rebuild or a new host gets exactly the versions that were tested. Upgrades become a deliberate change you can review and roll back. To upgrade, change the tag, read the release notes and run `docker compose pull && docker compose up -d`.
 
 ### Common settings
 
 - `restart: unless-stopped`: containers come back after a crash or a reboot of the LXC, but not if you stopped them on purpose.
-- Services reach each other by **service name** on the default Compose network (`prometheus`, `grafana`, `blackbox`, `alertmanager`, `node-exporter`). That's why configs use `blackbox:9115` and `alertmanager:9093` instead of IPs.
+- Services reach each other by **service name** on the default Compose network (`prometheus`, `grafana`, `blackbox`, `alertmanager`, `node-exporter`, `pve-exporter`). That's why configs use `blackbox:9115` and `alertmanager:9093` instead of IPs.
 
 ### prometheus
 
@@ -646,6 +694,22 @@ No published port: only Prometheus needs to reach it, on `blackbox:9115`. Keepin
 - `pid: host` lets it see the processes of noc-core, not just its own.
 - Read-only and no published port: least privilege. Prometheus reaches it on `node-exporter:9100`.
 - Inside an LXC, "host" means the **noc-core LXC**, not the Proxmox host. Memory figures may show the Proxmox host's values instead of the LXC limit. See [known limitations](operations-and-troubleshooting.md#troubleshooting).
+
+### pve-exporter
+
+```yaml
+  pve-exporter:
+    image: prompve/prometheus-pve-exporter:3.10.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9221:9221"
+    volumes:
+      - ./pve/pve.yml:/etc/prometheus/pve.yml:ro
+```
+
+- Needs a Proxmox API token first ([how-to](how-to-guides.md#monitor-proxmox-guests-with-pve-exporter)). Create `pve/pve.yml` **before** the first `docker compose up -d`: if the file is missing, Docker creates a folder with that name and the exporter fails. If you do not use Proxmox, delete this service from your `compose.yaml`.
+- `./pve/pve.yml` holds the token secret. It is mounted read-only and ignored by Git. If the log says `permission denied`, make the file readable for the container (`chmod 644`).
+- Port `127.0.0.1:9221` is only for testing from noc-core. Prometheus reaches the exporter on `pve-exporter:9221` over the Compose network, so the port is not exposed to the LAN.
 
 ### volumes
 
