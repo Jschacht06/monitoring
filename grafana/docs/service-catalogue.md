@@ -1,6 +1,8 @@
 # Service catalogue in Grafana
 
-This guide continues the clean installation in [setup.md](../../docs/setup.md), adding a Grafana dashboard that lists every monitored service, its owner, dependencies and contact person. Each step ends with a check that tells you what you should see before you continue.
+This guide continues the installation in [setup.md](../../docs/setup.md), adding a Grafana dashboard that lists currently discovered scrape targets by service, with their owner, dependencies and contact person. Each step ends with a check that tells you what you should see before you continue.
+
+**Review scope (14 October 2026):** the catalogue queries and workflow were checked against official documentation. The supporting setup/configuration guides are supplied unchanged as context. Their installed versions, live service count, target addresses, alerts and previous test results have not been independently verified. Run the checks below on the recipient's installation before signing it off. The package is an addition to the monitoring stack; the dashboard JSON does not install that stack.
 
 All commands run as root inside the Debian 13 LXC, from the stack folder:
 
@@ -8,7 +10,7 @@ All commands run as root inside the Debian 13 LXC, from the stack folder:
 cd /opt/monitoring
 ```
 
-Use `/opt/monitoring` for both the clean home installation and the clean school installation. This is the same path used throughout the monitoring guides. Enable nesting as part of the base setup.
+The supplied setup uses `/opt/monitoring` for both home and school. If the recipient uses another stack folder, substitute that folder in the commands. Docker-in-LXC configuration belongs to the supporting base setup and must be working before continuing here.
 
 Placeholders used in this guide:
 
@@ -25,7 +27,7 @@ Placeholders used in this guide:
 
 ## 1. Prerequisites
 
-On each clean Debian 13 LXC, first follow [setup.md](../../docs/setup.md) through step 8. That installs the tools, clones the repo into `/opt/monitoring`, prepares the Compose and Alertmanager configuration, starts the stack and creates the Prometheus data source. Continue here after those checks pass. The catalogue guide assumes sufficient resources and does not repeat the server installation.
+On a new installation, use [setup.md](../../docs/setup.md) through step 8 as the supplied stack context, and verify a working Compose stack and Prometheus data source before continuing. On an existing installation, reuse its working configuration. You need permission to change the Prometheus configuration and create/save Grafana dashboards (and permission to create a data source if one is missing). The catalogue guide assumes sufficient resources and does not repeat the server installation.
 
 The base setup also copies `prometheus/template.yml` to `prometheus/prometheus.yml`. The latter is now an ignored local configuration file. On an existing installation, keep your current copy and integrate new template settings into it; copy the template only when creating a configuration for the first time.
 
@@ -43,25 +45,50 @@ Use the Prometheus data source created during that base installation. A clean Gr
 docker compose ps
 ```
 
-The five services should be `Up`. Grafana opens at `http://<noc-core-ip>:3000`.
+Every service enabled in your actual `compose.yaml` should be running without a restart loop. The supporting configuration describes five base services and an optional `pve-exporter`; count the services actually enabled rather than expecting a fixed total. Grafana opens at `http://<noc-core-ip>:3000` if that port is published as described.
+
+Verify the active `blackbox` job in `prometheus/prometheus.yml` before adding target files. It must discover the mounted target folder, pass the destination and module to Blackbox, and preserve `instance` as the destination. The supplied configuration reference describes this pattern; adjust paths/service names to the actual stack and update an existing job rather than duplicating it:
+
+```yaml
+  - job_name: blackbox
+    metrics_path: /probe
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/*.yml']
+        refresh_interval: 1m
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+```
+
+This requires the host `prometheus` folder to be mounted at `/etc/prometheus` in the Prometheus container. Keep existing rules, other jobs and any intentional additional relabeling. The `http_2xx`, `tcp_connect` and `icmp` modules must exist in the active `blackbox/blackbox.yml`. A module name is a local recipe name; its behavior depends on that recipe. The supplied reference describes HTTP/TCP/ICMP probers with 5-second timeouts, leaving time within the 10-second scrape timeout. See [the Blackbox exporter scrape pattern](https://github.com/prometheus/blackbox_exporter#prometheus-configuration) and [file discovery configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
+
+If you change the main job, validate and reload it as in steps 4–5. File discovery only applies automatically when this job is active and can read the matching files.
 
 ---
 
 ## 2. Add the first targets and their catalogue labels
 
-A catalogue entry starts with the labels on a monitored target. `group`, `service` and `host` identify it. Add three more labels: `owner`, `contact` and `dependencies`.
+A catalogue entry starts with the labels on a monitored target. `group`, `service` and `host` define the service identity used by this package. Add three more labels: `owner`, `contact` and `dependencies`. Two independent applications on the same host need distinct `service` values. Several checks of one application use the same identity labels and exactly the same metadata.
 
 | Label | What it does | Where it is used |
 |---|---|---|
-| `group` | Owning group or team, for example `noc` or `group-a` | Catalogue column, filters and the existing alert descriptions |
-| `service` | Service name, for example `grafana`, `wiki` or `ssh` | Catalogue column and the existing alert summaries |
-| `host` | Machine the service runs on | Catalogue column, existing email grouping and inhibition. Use the same value for all checks on one machine. |
+| `group` | Owning group or team, for example `noc` or `group-a` | Catalogue column and filters; alert use depends on the active rules |
+| `service` | Service name, for example `grafana`, `wiki` or `ssh` | Catalogue column; alert use depends on the active rules |
+| `host` | Stable machine identity for this service | Catalogue column; keep identical values across checks on one machine when active alert grouping/inhibition uses `host` |
 | `owner` | Responsible team or person | Owner column |
 | `contact` | Named person and contact channel | Contact person column |
 | `dependencies` | Services or infrastructure this service requires | Dependencies column |
 | `module` | Existing probe type: `http_2xx`, `tcp_connect` or `icmp` | Selects the Blackbox probe; not part of the service identity |
 
-Dependencies are written as `group/service@host`. For infrastructure that is not monitored, use `external:<name>`. Separate several values with `; `, for example `external:docker; noc/prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record.
+This guide's dependency notation is `group/service@host`; it is a readable-text convention, not built-in Grafana dependency resolution. For infrastructure that is not monitored, use `external:<name>`. Separate several values with `; `, for example `external:docker; noc/prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record. Record `noc/prometheus@noc-core` for Grafana only if it is the dependency you intend to describe (for example this dashboard's data source); Grafana's own process/database health does not inherently depend on Prometheus.
 
 Why: a contact and dependency list tells the person reading the dashboard whom to call and what else to check. These labels document relationships; they do not automatically change alert routing or mute alerts.
 
@@ -69,7 +96,7 @@ Save a copy before editing the configuration:
 
 ```bash
 CATALOGUE_BACKUP="/opt/monitoring-catalogue-backup-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$CATALOGUE_BACKUP"
+install -d -m 700 "$CATALOGUE_BACKUP"
 cp -a prometheus "$CATALOGUE_BACKUP/"
 ```
 
@@ -83,7 +110,7 @@ Replace the placeholders below before saving:
 
 ```yaml
 - targets:
-    - http://prometheus:9090/-/healthy
+    - http://prometheus:9090/-/ready
   labels:
     module: http_2xx
     group: noc
@@ -107,9 +134,11 @@ Replace the placeholders below before saving:
 
 If you already followed setup.md, its `noc.yml` puts both endpoints in one `noc-selftest` block. Replace that block with the two above. They are separate services and should become separate catalogue rows. If the self-checks are already in another target file, update that file instead of adding duplicate probes.
 
-Keep `noc` and `noc-core` consistent with the existing internal target labels. The URLs use Compose service names because Blackbox probes them over the Docker network. Your browser still uses the LXC IP.
+Keep `noc` and `noc-core` consistent with the existing internal target labels. The URLs use Compose service names because Blackbox probes them over the Docker network. Your browser still uses the LXC IP. These names resolve when the containers share the relevant [Compose network](https://docs.docker.com/compose/how-tos/networking/).
 
-Real target files are ignored by Git, as explained in [adding-targets.md](../../docs/adding-targets.md). Leave the tracked `template.yml` as a template.
+The Prometheus example uses `/-/ready`: it returns success when Prometheus can serve queries. `/-/healthy`, used in the supporting setup example, is a liveness endpoint that always returns HTTP 200 while the server can answer it; it does not test readiness. Choose the endpoint matching your check's purpose. Grafana's `/api/health` checks the Grafana API/database health response; it does not test every configured data source. See [Prometheus management endpoints](https://prometheus.io/docs/prometheus/latest/management_api/) and [Grafana health API](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/other/#health-api).
+
+Real target files are ignored by Git, as explained in [adding-targets.md](../../docs/adding-targets.md). Leave the tracked `template.yml` as a template. The target/config files and their parent directories must be readable/traversable by the Prometheus process inside its container; a root-only target file can silently prevent discovery. Keep credentials out of these catalogue labels.
 
 **Check:** in Grafana *Explore* or the Prometheus query box, run:
 
@@ -117,7 +146,7 @@ Real target files are ignored by Git, as explained in [adding-targets.md](../../
 probe_success{group="noc", service=~"prometheus|grafana"}
 ```
 
-After discovery and a few scrape cycles, both targets should return `1`. Expand a result and check that the owner, contact and dependencies are present. No restart is needed for target-file changes.
+After discovery and a few scrape cycles, both targets should return `1` when their selected health endpoints pass. Expand a result and check that the owner, contact and dependencies are present. Target-file edits need no Prometheus restart with the active file-discovery job verified above. Keep credentials out of endpoint URLs and label values: labels are stored with metrics and displayed in the catalogue.
 
 ---
 
@@ -164,7 +193,7 @@ Use the service's actual port and path. For HTTPS, use `https://` and the correc
     dependencies: '<dependencies>'
 ```
 
-This proves that the TCP port accepts a connection. It does not test a login or the whole application protocol.
+With the basic `tcp_connect` recipe shown in the supporting reference, this proves that the TCP port accepts a connection. It does not test a login or the whole application protocol. HTTP recipes can also follow redirects; a 2xx login page can pass a simple HTTP probe, so verify what the final response actually checks. See [Blackbox module settings](https://github.com/prometheus/blackbox_exporter/blob/master/CONFIGURATION.md).
 
 ### Host with ICMP
 
@@ -182,6 +211,8 @@ This proves that the TCP port accepts a connection. It does not test a login or 
 ```
 
 > **Only add ICMP for hosts that reliably answer ping.** The existing inhibit rule suppresses HTTP ServiceDown alerts while the same host's ICMP ServiceDown alert is firing. Check the ping result before relying on it. See [combining ICMP and HTTP](../../docs/adding-targets.md#combining-icmp-and-http-for-one-host).
+
+That inhibition behavior is described by the supplied reference; it depends on the Alertmanager configuration actually loaded. ICMP also needs appropriate privileges in the exporter environment. On Linux this can be an allowed ping group, `CAP_NET_RAW` or root; nested LXC/container restrictions can still prevent probing. Confirm an ICMP result of `1` before using it for inhibition. See [Blackbox ICMP permissions](https://github.com/prometheus/blackbox_exporter#permissions).
 
 Probes run from Blackbox, so the endpoints must be reachable from the monitoring LXC. `localhost` in a probe target means Blackbox itself.
 
@@ -203,7 +234,7 @@ The `prometheus` and `node` jobs are also monitored targets. They need catalogue
 nano prometheus/prometheus.yml
 ```
 
-Update these two existing entries under `scrape_configs`. Keep the rest of the file, including the `blackbox` job. Replace the owner/contact placeholders, using exactly the same values as the corresponding service probes:
+Update these two existing entries under `scrape_configs`. Keep the rest of the file, including the `blackbox` job. Replace the owner/contact placeholders, using exactly the same values as the corresponding service probes. Put these labels in the targets' `labels` blocks; `global.external_labels` are for communication with external systems and do not populate the local `up` series used by this dashboard.
 
 Apply the examples below as label updates to your existing `static_configs` entries. Preserve additional host targets and the `node` job's `metric_relabel_configs` from the current template: that block drops shared Proxmox hardware and ZFS metrics from `noc-core` when it runs in an LXC. Replacing the entire job with the shorter example would lose that filtering.
 
@@ -257,6 +288,24 @@ If you enabled the Prometheus template's optional `smartctl` job, add all six ca
 
 Replace the placeholders and set dependencies to match how the exporter is actually installed. Use the same `host` label as that machine's Node Exporter so the drive and host alerts stay aligned. Update an enabled job rather than creating a duplicate; leave the optional job commented out if you are not collecting drive health. The installation steps are in [how-to-guides.md](../../docs/how-to-guides.md#add-smartctl_exporter-for-drive-health).
 
+### Existing Proxmox API scrape or any other job
+
+If `job="pve"` is enabled, its scrape is also included in this catalogue. Add the missing labels to the **existing** `static_configs` target blocks of that job. Preserve its `metrics_path: /pve`, parameters and relabeling to `pve-exporter:9221`; a plain scrape of a Proxmox host is not a substitute. For example, the label portion can be:
+
+```yaml
+        labels:
+          group: noc
+          service: pve-exporter
+          host: '<existing-proxmox-host-label>'
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: 'external:docker; external:proxmox-api'
+```
+
+Keep the actual `group` and `host` values already used by that job, and replace the other placeholders. This row describes the API collection check, not one row for every VM/LXC returned by the exporter. No new exporter or second `pve` job is needed just to add catalogue metadata. The supporting [Proxmox exporter guide](../../docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter) describes its existing integration; Smith guest resource data is handled separately in [smith-resource-metrics.md](smith-resource-metrics.md).
+
+Apply all six catalogue labels to every other enabled scrape job too, including any direct scrape of an exporter's own `/metrics` endpoint. The dashboard intentionally uses all current `up` series; adding a new integration can therefore reveal incomplete metadata.
+
 **Check:**
 
 ```bash
@@ -276,7 +325,7 @@ docker compose kill -s SIGHUP prometheus
 docker compose logs --since 2m prometheus
 ```
 
-`SIGHUP` reloads the configuration without restarting the container. It does not need `--web.enable-lifecycle`. The restart procedure in [operations-and-troubleshooting.md](../../docs/operations-and-troubleshooting.md#how-to-apply-a-change) is also an option after validation.
+`SIGHUP` reloads the configuration and configured rule files without restarting the container. It does not need `--web.enable-lifecycle`; that flag is required for the HTTP reload endpoint. This also applies to later rule changes even if a supporting guide describes restarting. See [Prometheus configuration reloads](https://prometheus.io/docs/prometheus/latest/configuration/configuration/). A restart is another option after validation.
 
 **Check:** after a few 30-second scrape cycles, in grafana (in the explore tab), query:
 
@@ -284,7 +333,7 @@ docker compose logs --since 2m prometheus
 up
 ```
 
-Every target should now carry `group`, `service`, `host`, `owner`, `contact` and `dependencies`. Check the logs and *Status → Target health* for discovery errors too; main-config validation alone does not prove every target file loaded.
+Every target should now carry `group`, `service`, `host`, `owner`, `contact` and `dependencies`. Check the logs and *Status → Target health* for discovery errors too; main-config validation alone does not prove every target file loaded. Check `prometheus_config_last_reload_successful` is `1` and `prometheus_config_last_reload_success_timestamp_seconds` advanced after your command; the signal command itself does not prove the new configuration was accepted. These metrics are defined in the [Prometheus server source](https://github.com/prometheus/prometheus/blob/main/cmd/prometheus/main.go).
 
 ---
 
@@ -339,7 +388,9 @@ count by (group, service, host, owner, contact, dependencies) (up)
 |---|---|---|
 | `up` | One series per scrape target, including a failing scrape with value 0 | Failing checks stay in the inventory while Prometheus keeps scraping them. |
 | `count by (...)` | Counts checks that share all six labels | Several checks of the same service become one row when their metadata agrees. |
-| Checks column | The resulting count | It counts configured checks, not healthy checks. |
+| Checks column | The resulting count | It counts current `up` series, including failures; it does not count healthy checks or services absent from discovery. |
+
+`up` is generated for each scrape target; see [Prometheus jobs and instances](https://prometheus.io/docs/concepts/jobs_instances/). A newly discovered target may not appear until its first scrape. Removed targets leave current results after discovery/staleness processing. A row is not proof that a service has been configured in every intended environment.
 
 For destination health, use `probe_success`, as explained in [up vs probe_success](../../docs/adding-targets.md#up-vs-probe_success). A blackbox check can have `up=1` and `probe_success=0`.
 
@@ -356,7 +407,7 @@ If you build or adjust the table manually, use these [query options](https://gra
 
 The template applies these settings. If your Grafana generates a different numeric field name, rename that field to **Checks**.
 
-**Check:** the table has one row per `(group, service, host)`. Contact and dependency text is readable, and changing the time range does not produce a row for every scrape.
+**Check:** after all identity labels are complete and metadata agrees, the table has one row per `(group, service, host)`. Until then it has one row per distinct combination of all six labels, so conflicting metadata can split a service into multiple rows. Contact and dependency text is readable, and changing the range while keeping its end at now does not produce a row for every scrape. An Instant query evaluates at the selected range's end; an end in the past shows the catalogue at that time.
 
 ---
 
@@ -371,7 +422,9 @@ up{group=""} or up{service=""} or up{host=""}
 or up{owner=""} or up{contact=""} or up{dependencies=""}
 ```
 
-**Check:** no results. An empty matcher also finds a label that is absent. Review the text manually too: a placeholder such as `<owner>` is present, but is not a finished entry.
+**Check:** no results. An empty matcher also finds a label that is absent, as specified in [Prometheus label matching](https://prometheus.io/docs/prometheus/latest/querying/basics/#instant-vector-selectors). Review the text manually too: whitespace, placeholders such as `<owner>` and incorrect dependency/contact values are present labels but unfinished entries.
+
+Fix missing `group`, `service` or `host` before interpreting the counter as a number of services. Without complete identity labels, unrelated checks can collapse into the same partial/blank tuple. The red counter still flags incomplete metadata, but it can undercount the real affected services. Inspect individual `job`, `instance` and `module` labels in Explore to identify each unfinished check. The bottom table and counter agree on tuples; that agreement alone does not prove identity completeness.
 
 ### Conflicting metadata
 
@@ -407,7 +460,7 @@ Save the dashboard, [export its JSON](service-catalogue-dashboard.md#5-export-a-
 docker compose restart grafana
 ```
 
-**Check:** after Grafana starts, the saved dashboard is still available. It is stored in `grafana_data`, together with the data source. Keep the JSON export and screenshots as project evidence.
+**Check:** after Grafana starts, the saved dashboard is still available. In the supplied Compose configuration, `grafana_data` is mounted at `/var/lib/grafana`; that persistent storage retains Grafana's database, including saved dashboards and data sources. Verify the mount in your actual configuration. Another database/storage arrangement must preserve its own data instead. See [Grafana Docker persistent storage](https://grafana.com/docs/grafana/latest/setup-grafana/installation/docker/). Keep the JSON export and screenshots as project evidence.
 
 Record the actual check results with the evidence:
 
@@ -432,7 +485,7 @@ Record the actual check results with the evidence:
 | Change table layout | Edit the Grafana panel and save the dashboard | Immediate in the UI |
 | Reuse the dashboard | Export/import its JSON and choose the destination source | No container restart |
 
-Changes to metadata create new time series, because labels are part of a series' identity. Keep values short and stable. Removing a target removes it from the current catalogue after discovery/staleness processing; this dashboard is not an archive of retired services.
+Changes to metadata create new time series, because labels are part of a series' identity. Keep values short and stable. Removing a target removes it from the current catalogue after discovery/staleness processing; this dashboard is not an archive of retired services. See [Prometheus staleness](https://prometheus.io/docs/prometheus/latest/querying/basics/#staleness).
 
 ## Troubleshooting
 

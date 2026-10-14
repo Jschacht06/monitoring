@@ -2,12 +2,16 @@
 
 This guide continues from [step 7 of service-catalogue.md](service-catalogue.md#7-create-or-reuse-the-catalogue-dashboard). Complete the target labels and Prometheus data source first. Grafana is available at `http://<noc-core-ip>:3000`, and the source uses `http://prometheus:9090`.
 
+**Scope and compatibility:** this is a manually imported **Classic** Grafana dashboard JSON definition with `schemaVersion: 39`. That number describes the dashboard schema, not the required Grafana product version. Grafana can migrate older dashboard definitions; confirm the import and all panels in the recipient's installed version before accepting the setup. Menu wording can vary. The catalogue queries were reviewed against official documentation on 14 October 2026; the live import, actual stack configuration and installed versions still require the checks below. See [Grafana's dashboard models](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/view-dashboard-json-model/) and [dashboard migration implementation](https://github.com/grafana/grafana/blob/main/public/app/features/dashboard/state/DashboardMigrator.ts).
+
+The top table is a current scrape inventory. It does not discover applications automatically or enumerate the VM/LXC guests contained in a Proxmox exporter's response. The three identity labels must be complete and metadata must agree before one table row corresponds to one service instance. The metadata counter checks absent/empty labels; it cannot verify contact accuracy, placeholders or services that were never configured.
+
 If you do not have a catalogue dashboard yet, first create its definition using [dashboard-template.json](../dashboard-template.json). The template already contains the three panels below. Copy it, replace the title, description and environment-tag placeholders, then import the finished file into Grafana. **Import creates the dashboard in Grafana.**
 
 | Position | Panel | Visualisation | Why it is there |
 |---|---|---|---|
-| Top | Every monitored service | Table | The complete service, owner, contact and dependency list. |
-| Middle | Services with incomplete catalogue metadata | Stat | Counts service instances with at least one incomplete check. Green at 0, red above 0. |
+| Top | Every monitored service | Table | Current scrape inventory grouped by all six catalogue labels. |
+| Middle | Services with incomplete catalogue metadata | Stat | Counts affected identity-label tuples. Green at 0, red above 0; missing identity labels can merge unrelated services. |
 | Bottom | Services missing catalogue metadata | Table | Lists the affected service instances and how many of their checks need metadata. |
 
 ---
@@ -27,9 +31,9 @@ If you do not have a catalogue dashboard yet, first create its definition using 
 
 ## 2. Create your dashboard file from the template
 
-The JSON file only needs to be on your local computer, where you open Grafana in a browser. **It does not need to be copied to or stored on the LXC.** You upload it through Grafana's web interface; Grafana stores the imported dashboard in its own data volume.
+The JSON file only needs to be on your local computer, where you open Grafana in a browser. **It does not need to be copied to or stored on the LXC.** You upload it through Grafana's web interface; Grafana stores the imported dashboard in its database. The supplied stack persists that database in its `grafana_data` volume; confirm the actual storage configuration before relying on it.
 
-1. On your computer, open [dashboard-template.json](../dashboard-template.json) from the `grafana` folder of your local clone.
+1. On your computer, open the supplied [dashboard-template.json](../dashboard-template.json) from the package's `grafana` folder (or the matching file in your local clone).
 2. Save a copy named `service-catalogue-dashboard.json` on your computer. Use a different filename if you already have a working copy you want to keep.
 3. Open that copy in a text editor.
 
@@ -73,7 +77,7 @@ Tags help you find the dashboard in Grafana. Replace `<your environment tag here
 "refresh": "30s",
 ```
 
-This makes Grafana refresh the dashboard every 30 seconds. Keep `30s` to match the scrape interval, or replace it with another interval such as `1m` if you want less frequent refreshes.
+This makes Grafana refresh the dashboard every 30 seconds. The supplied stack describes a 30-second scrape interval; confirm the active interval and keep `30s` or choose another refresh such as `1m`. Dashboard refresh does not change metric collection.
 
 ### Panel names
 
@@ -109,7 +113,7 @@ In the **Every monitored service** panel, find `renameByName` under `transformat
 }
 ```
 
-The keys on the left identify the fields returned by the query. Keep those keys and change only the text on the right if you want different column headings. For example, change `"contact": "Contact person"` to `"contact": "Contact"`. Keep a name such as **Checks** for `Value`, because it counts configured checks.
+The keys on the left identify the fields returned by the query. Keep those keys and change only the text on the right if you want different column headings. For example, change `"contact": "Contact person"` to `"contact": "Contact"`. Keep a name such as **Checks** for `Value`, because it counts current scrape-target series, including failing scrapes.
 
 ### Query settings
 
@@ -183,7 +187,7 @@ count by (group, service, host, owner, contact, dependencies) (up)
 | Fields | Hide Time; order group, service, host, owner, contact, dependencies, Value |
 | Display names | Group, Service, Host, Owner, Contact person, Dependencies, Checks |
 
-The query groups checks by all six catalogue labels. **Checks** counts configured checks, including a scrape whose `up` value is 0. All checks for the same service must have matching catalogue metadata to produce one row.
+The query groups checks by all six catalogue labels. **Checks** counts current `up` series, including a scrape whose `up` value is 0. All checks for the same service must have complete, matching catalogue metadata to produce one service row. Newly discovered targets need a first scrape; removed targets disappear after discovery/staleness processing. See [Prometheus scrape-target series](https://prometheus.io/docs/concepts/jobs_instances/).
 
 ### Services with incomplete catalogue metadata
 
@@ -209,7 +213,9 @@ or (0 * count(up))
 | Colour mode | Background |
 | Thresholds | Absolute; base green, 1 red |
 
-The inner query groups incomplete checks by `(group, service, host)`; the outer `count` counts those service instances. Two incomplete checks for one service contribute **1**, even if several labels are missing. The fallback supplies 0 when targets exist and all labels are filled in. An empty inventory produces no data rather than a successful zero. Placeholder text and incorrect contact details still need a manual review. See [Prometheus aggregation and set operators](https://prometheus.io/docs/prometheus/latest/querying/operators/#aggregation-operators).
+The inner query groups incomplete checks by `(group, service, host)`; the outer `count` counts those label tuples. Two incomplete checks with the same identity contribute **1**, even if several labels are missing. When identity labels are absent, unrelated checks can merge into one partial/blank tuple, so this can undercount real affected services. Correct missing identity labels before interpreting it as a service count.
+
+The fallback supplies 0 when current targets exist and all required labels are present. An empty inventory produces no data rather than a successful zero. Placeholder text, whitespace-only labels and incorrect contact details still need manual review. See [Prometheus aggregation and set operators](https://prometheus.io/docs/prometheus/latest/querying/operators/#aggregation-operators) and [empty-label matching](https://prometheus.io/docs/prometheus/latest/querying/basics/#instant-vector-selectors).
 
 ### Services missing catalogue metadata
 
@@ -230,7 +236,7 @@ count by (group, service, host) (
 | Fields | Hide Time; order group, service, host, Value |
 | Display names | Group, Service, Host, Checks missing metadata |
 
-This table uses the same missing-label filter and service identity as the counter. It has one row per affected service instance; **Checks missing metadata** counts its incomplete checks, including scrapes with `up=0`. A check missing several labels is included once.
+This table uses the same missing-label filter and grouping as the counter. It has one row per affected identity-label tuple; **Checks missing metadata** counts its incomplete checks, including scrapes with `up=0`. A check missing several labels is included once by the set union. Once identity labels are complete, each tuple represents one service instance.
 
 When the top table has data and the counter is **0**, this bottom table should be empty or show **No data**. If the identity labels themselves are missing, the row can contain blank fields; inspect the missing-label selector in Explore to see the individual `job` and `instance` values and complete those labels.
 
@@ -248,7 +254,7 @@ Use this step for a manually created dashboard or an existing catalogue you want
 
 1. Open the saved dashboard.
 2. Open the toolbar's *Export → Export as code* option. Some Grafana versions show **Export as JSON** in the share/export menu.
-3. Choose the **Classic** dashboard model for this workflow, JSON, and enable **Share dashboard with another instance** (also called **Export for sharing externally** in some versions).
+3. Expand **Advanced options** if needed, choose the **Classic** dashboard model for this workflow, and enable **Share dashboard with another instance** (also called **Export for sharing externally** in some versions). Classic exports are JSON; use the Classic definition for this import procedure.
 4. Download the file as `service-catalogue-dashboard.json`.
 
 Why the sharing option: it removes instance-specific details so the destination import can use its own data source. See [Grafana's dashboard export instructions](https://grafana.com/docs/grafana/latest/visualizations/dashboards/share-dashboards-panels/#export-a-dashboard-as-code).
@@ -282,9 +288,9 @@ Keep the time range ending at **now**, check the panel results and save any chan
 
 | Check | Expected result |
 |---|---|
-| Top catalogue table | One row per service instance, with readable owner/contact/dependency fields |
-| Middle metadata Stat | Number of affected service instances; 0 when every current check has all required labels |
-| Bottom missing-metadata table | One row per affected service instance; empty when the counter is 0 |
+| Top catalogue table | After identity/metadata checks pass, one row per service instance with readable owner/contact/dependency fields |
+| Middle metadata Stat | Number of affected identity-label tuples; 0 when every current check has all required labels |
+| Bottom missing-metadata table | One row per affected identity-label tuple; empty when the counter is 0 and the top table has data |
 | Counter/list agreement | The number of bottom-table rows matches the counter |
 | Column names | Checks in the top table; Checks missing metadata in the bottom table |
 

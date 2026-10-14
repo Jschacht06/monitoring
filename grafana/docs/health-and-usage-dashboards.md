@@ -2,7 +2,7 @@
 
 This guide continues from the working [service catalogue](service-catalogue.md). Keep that dashboard as the ownership and dependency list. Add two dashboards for the next project milestone: service health over time, and Smith resource usage compared with approved budgets. Each step ends with a check before you continue.
 
-**Status:** these instructions and dashboard templates were prepared from the repository configuration and checked structurally. An initial health-dashboard import exposed a status-history point-limit error; the template now includes explicit query-resolution settings, which still need verification on the running instance. The Proxmox integration remains a proposed installation until the checks in [smith-resource-metrics.md](smith-resource-metrics.md) pass. Exporting JSON manually is covered here; automatic Grafana provisioning remains a later task.
+**Status:** reviewed against official Grafana, Prometheus and exporter documentation on 14 October 2026. These are dashboard instructions for an existing monitoring stack, not a replacement installation. Live imports, permissions, target coverage and failure/recovery still require the acceptance checks below. The supplied setup guides already describe `pve-exporter`; [smith-resource-metrics.md](smith-resource-metrics.md) checks and extends that integration without creating a duplicate collector. Manual JSON import/export is covered here.
 
 | Dashboard | Questions it answers | Data needed |
 |---|---|---|
@@ -10,9 +10,11 @@ This guide continues from the working [service catalogue](service-catalogue.md).
 | Service health and trends (new) | Which check fails, is the check itself working, how has health/latency changed? | Existing Blackbox probes and `up` |
 | Smith resources and budgets (new) | How much is allocated, how much is used, how close is each group to its approved budget? | Approved Proxmox API metrics, guest inventory and group budgets |
 
-The health dashboard can be built immediately using the existing stack. The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
+The health dashboard can be built once the existing stack and Blackbox targets pass step 1. The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
 
 Commands in this guide run inside noc-core from `/opt/monitoring`. Dashboard JSON files are edited on your own computer and uploaded through Grafana, just like the catalogue template. They do not need to be stored on the LXC.
+
+**Choose your route:** importing the template in step 3 creates all eight health panels, including their queries and display settings. After checking the filters in step 4, use steps 5 and 6 as reference and complete only their final **Check** paragraphs. Follow their panel-creation instructions only if you are building manually or correcting a missing/incorrect panel. Then continue to step 7 for the additional Smith resource metrics.
 
 ---
 
@@ -34,11 +36,25 @@ probe_success{job="blackbox"}
 probe_duration_seconds{job="blackbox",module="http_2xx"}
 ```
 
-`up=1` for a Blackbox target means the exporter answered Prometheus. `probe_success=1` means the destination passed the check. `up=1, probe_success=0` is a real failed destination check. `up=0` means its health is unknown because the monitoring failed.
+`up=1` means Prometheus successfully scraped the Blackbox `/probe` response for that target; it does not prove the destination is healthy. `probe_success=1` means the configured probe passed from the exporter’s network location. A fresh `up=1, probe_success=0` means the configured check failed; this can reflect the destination, network, DNS, TLS or an incorrect check definition. `up=0`, a missing success metric or old samples means destination health is Unknown. A passed TCP connection or ping alone does not verify the application’s full function. See [Prometheus scrape metrics](https://prometheus.io/docs/concepts/jobs_instances/) and [Blackbox probe results](https://github.com/prometheus/blackbox_exporter#checking-the-results).
 
-The configuration currently scrapes every **30 seconds**. Prometheus retention is **45 days or 10 GB, whichever limit removes old data first**. A newly monitored target has history only from its first scrape; keeping 45 days does not create past data.
+The supplied configuration reference describes **30-second** scrapes and retention flags **45d / 10GB**. Verify the actual loaded configuration and flags on the destination: these values are not measurements of a running instance. A per-job `scrape_interval` can override the global value. If both retention flags are enabled, the first policy reached applies; the size setting is a TSDB retention policy, not a hard cap on all disk use. A newly monitored target has history only from its first scrape. See [scrape configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config) and [retention behavior](https://prometheus.io/docs/prometheus/latest/storage/#operational-aspects).
 
-**Check:** each expected probe has `group`, `service`, `host`, `module`, `owner`, `contact` and `dependencies`. An empty HTTP-duration query is expected if there are no HTTP checks yet; add an agreed HTTP check before building that panel. Record existing faults rather than requiring everything to be healthy before you can display it.
+In Prometheus, check *Status → Configuration*, *Command-line flags* and *Target health* (names differ by version). Confirm the Blackbox scrape interval, last scrape and scrape errors. In Grafana’s Prometheus data-source settings, set **Scrape interval** to the same value. `http://prometheus:9090` is correct only when Grafana and Prometheus share the Compose network described in the supporting setup guide; otherwise use the address reachable from the Grafana server.
+
+The health template has two hidden **Constant** variables: `probe_interval_s=30` (coverage denominator) and `probe_freshness_s=90` (maximum accepted sample age, exclusive). Set the first to the verified interval in seconds; choose the second longer than normal scrape completion and jitter, typically three intervals for this stack. Also update the status-history **Min interval** separately if collection is not every 30s. One coverage constant assumes every selected check uses the same interval; split dashboards or adapt the coverage calculation if intervals differ. These display settings do not change Prometheus collection. See [Constant variables](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/add-template-variables/#add-a-constant-variable).
+
+**Check:** compare current `up{job="blackbox"}` with the agreed service/check list and the target files; no metric query can find a target that was never configured. Each expected probe needs `group`, `service`, `host`, `module`, `owner`, `contact` and `dependencies`. Confirm the `module` label matches the actual `?module=` relabeling and that `instance` is the destination, not `blackbox:9115`. The supplied [target guide](../../docs/adding-targets.md) describes this layout. An empty HTTP-duration query is expected if there are no `http_2xx` checks or all are failing; other HTTP module names require updating that panel’s selector.
+
+The joins below use `job,instance,module,group,service,host,owner,contact,dependencies`. Run this current query; it must return no rows:
+
+```promql
+count by (job,instance,module,group,service,host,owner,contact,dependencies) (
+  up{job="blackbox"}
+) > 1
+```
+
+If there are duplicates distinguished by another label, include that label consistently in every health join. Confirm `probe_success` and `up` carry the same target labels. Record existing faults rather than requiring every probe to pass before displaying it.
 
 ---
 
@@ -46,13 +62,15 @@ The configuration currently scrapes every **30 seconds**. Prometheus retention i
 
 Export the catalogue using [the existing export procedure](service-catalogue-dashboard.md#5-export-a-dashboard-you-already-created). Keep its name and UID so you can restore that dashboard if needed.
 
-Before adding the resource collector or rules later, take a local configuration backup:
+Before editing the existing collector configuration or adding rules, take a local configuration backup:
 
 ```bash
 cd /opt/monitoring
 DASHBOARD_BACKUP="/opt/monitoring-dashboards-backup-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$DASHBOARD_BACKUP"
+install -d -m 700 "$DASHBOARD_BACKUP"
 cp -a compose.yaml prometheus "$DASHBOARD_BACKUP/"
+if [ -d pve ]; then cp -a pve "$DASHBOARD_BACKUP/"; fi
+if [ -d blackbox ]; then cp -a blackbox "$DASHBOARD_BACKUP/"; fi
 ```
 
 This backup contains private configuration and target labels. Keep it on the server with restricted access, outside Git. It is a configuration backup; a complete Grafana-volume restore remains a separate project task.
@@ -74,11 +92,11 @@ Before importing, keep these settings on the **Probe status history** panel. The
 | Query type / format | Range / Time series | `"range": true`, `"instant": false`, `"format": "time_series"` on query A |
 | Panel width | Full dashboard width | `"w": 24` in `gridPos` |
 
-Status history needs space between its cells. The automatic resolution can request more points than the panel can draw and produce **Too many points to visualize properly**. The explicit point setting makes Grafana request a coarser time step for longer periods. With Prometheus it controls query resolution, rather than imposing an exact 200-row cutoff. It does not change the 30-second collection interval or the stored history. See [Grafana's query options](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/query-transform-data/#query-options).
+Status history uses separate cells. An explicit point setting requests a coarser query step for longer periods and helps avoid a **Too many points to visualize properly** error. With Prometheus this affects query resolution rather than providing an exact 200-row cutoff. It does not change the collection interval or stored history; 200 is a suggested starting value, not a guaranteed rendering limit. See [Grafana's query options](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/query-transform-data/#query-options).
 
 1. Save a local copy named `service-health-dashboard.json`.
 2. Replace `<your dashboard title here>`, `<your description here>` and `<your environment tag here>`. Suggested title: **Service health and trends**; environment tag: `school` or `home-test`.
-3. Keep `id: null`, `uid: null` and every `${DS_PROMETHEUS}` reference. These create a new dashboard and let the import form select the destination source.
+3. Keep `id: null`, `uid: null` and every `${DS_PROMETHEUS}` reference. These create a new dashboard and let the import form select the destination source. Check the hidden Constant variables in the JSON against step 1 before import; edit their `query`, `current.text`, `current.value` and `options` value consistently, or adjust them afterward in Variables.
 4. In Grafana, go to *Dashboards → New → Import dashboard* and upload the complete local JSON file.
 5. Choose the project folder and the existing Prometheus source. Use a new UID; leave the catalogue's UID alone.
 6. Click **Import**, choose **All** for the filters, and set the time range to **Last 6 hours**, ending at **now**, with **30s** refresh.
@@ -95,7 +113,7 @@ If you already imported an earlier copy, update the existing panel during this s
 4. Run the query. Apply the panel changes, or return using **Back to dashboard** if that is the button shown, then **Save** the dashboard and **Exit edit**.
 5. Repeat the three time-range checks above in the normal dashboard view. Keep this panel full width. If a narrow screen still causes the error, lower Max data points to **100** and save again.
 
-Long periods now show sampled status at a wider time step and can miss short outages. Use **Last 15 minutes** to inspect individual 30-second checks. The current-status table, fault counters and alert rules do not depend on this history-panel resolution.
+Long periods show sampled status at a wider time step and can miss short outages. Use **Last 15 minutes** with a 30s query step to inspect 30-second checks; verify the actual returned step in Query inspector. The current-status table, fault counters and alert rules do not depend on this history-panel resolution.
 
 ---
 
@@ -103,7 +121,7 @@ Long periods now show sampled status at a wider time step and can miss short out
 
 The template already supplies `group` and `service`; importing it does not require adding them again. Step 4 is a check of those filters, or their setup when building manually.
 
-The Compose template lists Grafana **13.2.2**. In its current dashboard editor, settings and variables have separate paths:
+The supplied setup guide lists Grafana **13.2.2**; verify the running version. Current Grafana documentation describes the following editor paths; menu names and preview features vary by version:
 
 1. Open the dashboard and click **Edit** in the upper-right toolbar.
 2. Click the **Dashboard options** icon to open its sidebar. Hover over the toolbar icons to find the one with that name.
@@ -118,7 +136,7 @@ These paths follow Grafana's [dashboard settings](https://grafana.com/docs/grafa
 | `group` | `group` | `up{job="blackbox",group!=""}` | Multi-value, Include All, Custom all value `.*` |
 | `service` | `service` | `up{job="blackbox",group=~"$group",service!=""}` | Multi-value, Include All, Custom all value `.*` |
 
-Set refresh to **On dashboard load**. Changing `group` refreshes the dependent `service` variable; use All again if a previously selected service does not exist in the new group. For older/classic editors, the equivalent queries are:
+Set refresh to **On dashboard load**. Changing `group` refreshes the dependent `service` variable; use All again if a previously selected service does not exist in the new group. After target changes, reload the dashboard to refresh options. Label-value queries can include historical series, so an old dropdown value can legitimately produce No data in the current table. For older/classic editors, the equivalent queries are:
 
 ```text
 label_values(up{job="blackbox",group!=""}, group)
@@ -127,7 +145,7 @@ label_values(up{job="blackbox",group=~"$group",service!=""}, service)
 
 These are **Grafana variable queries**, not PromQL to paste into Prometheus. Multi-value variables require regex matchers such as `group=~"$group"`; see [Grafana's Prometheus variable documentation](https://grafana.com/docs/grafana/latest/datasources/prometheus/template-variables/).
 
-Save the dashboard after variable edits, then **Exit edit**. If the imported filters already match the table and work correctly, continue without changing them.
+Check hidden Constant variables `probe_interval_s` and `probe_freshness_s` here too. For a manual build, create those variables with the values verified in step 1. Save the dashboard after variable edits, then **Exit edit**. If the imported filters already match the table and work correctly, continue without changing them.
 
 **Check:** selecting one group narrows every health panel and the service dropdown. The catalogue still lists scrape-only services too; this dashboard deliberately shows destination probes. A service with no agreed probe has no measured destination health.
 
@@ -135,57 +153,29 @@ Save the dashboard after variable edits, then **Exit edit**. If the imported fil
 
 ## 5. Understand or build the current-health panels
 
-For a manual build, go to *Dashboards → New → New dashboard → Add visualization*. Select Prometheus, switch the query editor to **Code**, paste the relevant expression, choose the settings below, then apply the panel and save the dashboard. Menu names can differ slightly between Grafana versions.
+**If you imported the template:** the three counters and current-check table already exist. Read their meaning and complete the **Check** at the end. For a manual build, add each visualization, select Prometheus, use **Code** mode, apply the settings below and save.
 
-### Summary counters
-
-Each counter uses **Stat**, **Instant**, **Time series** format, calculation **Last**, 0 decimals, graph mode **None**, and No value **Unknown**. Current status queries must end at `now`.
-
-**Configured probe checks:**
-
-```promql
-count(up{job="blackbox",group=~"$group",service=~"$service"})
-```
-
-**Failed destination checks:**
-
-```promql
-count(
-  (probe_success{job="blackbox",group=~"$group",service=~"$service"} == 0)
-  and on(job,instance,module,group,service,host)
-  (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
-)
-or (0 * count(up{job="blackbox",group=~"$group",service=~"$service"}))
-```
-
-**Probe scrape failures:**
-
-```promql
-count(up{job="blackbox",group=~"$group",service=~"$service"} == 0)
-or (0 * count(up{job="blackbox",group=~"$group",service=~"$service"}))
-```
-
-For the two fault counters, use absolute thresholds: base green, **1 red**. The fallback yields zero only while the selected inventory exists. No matching inventory produces **Unknown/No data**. These counters count checks, not service instances: HTTP and TCP for one service are two checks. A missing `probe_success` despite `up=1` is covered by the **Unknown** status below, not by the scrape-failure counter.
+Current queries use **Instant**, end at **now**, and require the two Constant variables from step 1. The three counters use **Stat**, **Time series** format, calculation **Last**, 0 decimals, graph mode **None**, No value **Unknown**. A historical end time makes them statuses at that time rather than current statuses.
 
 ### Current probe checks
 
-Use this expression to retain an unknown state while a configured scrape fails or its success metric is absent:
+Use this expression for the table and the status-history panel. Known states require fresh `probe_success`, `up=1` and a fresh `up` sample. The fallback retains a visible check as `-1` when its state cannot be trusted.
 
 ```promql
 (
   probe_success{job="blackbox",group=~"$group",service=~"$service"}
-  and on(job,instance,module,group,service,host)
-  (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
 )
-or on(job,instance,module,group,service,host)
-(
-  -1 + 0 * up{job="blackbox",group=~"$group",service=~"$service"}
-)
+or on(job,instance,module,group,service,host,owner,contact,dependencies)
+(-1 + 0 * up{job="blackbox",group=~"$group",service=~"$service"})
 ```
 
 | Setting | Value |
 |---|---|
-| Title / visualisation | Current probe checks / Table |
+| Title / visualization | Current probe checks / Table |
 | Query | Instant; Format Table |
 | Transformation | Organize fields by name; hide Time and job |
 | Column order | group, service, host, module, instance, owner, contact, dependencies, Value |
@@ -194,15 +184,59 @@ or on(job,instance,module,group,service,host)
 | Status cell type | Colored background |
 | No value | Unknown |
 
-One row is one configured check. This keeps the endpoint visible when a service has several checks and only one fails. Keep the ownership columns, because the operator needs a contact when a row turns red.
+One row is one visible destination check. **Up** means that check passed; it is not evidence that every function of a service works. HTTP and TCP probes for the same service count as two checks. Ownership columns give the operator a contact for investigation.
 
-`Unknown` is a monitoring problem to investigate. Once a target is removed from discovery, it eventually disappears from current `up` too; this query does not preserve retired targets. Compare the dashboard with the agreed service list after target edits.
+The default freshness tolerance is **less than 90 seconds**, assuming 30s collection. Samples exactly 90s old are Unknown. Prometheus can otherwise reuse recent samples within its lookback window (normally 5 minutes). These gates reduce that stale-green window, but a fault between two scrapes remains undetected until collection or the freshness tolerance expires. If Prometheus/Grafana itself is unreachable, the panel can show a query error instead of an Unknown value. See [Prometheus staleness](https://prometheus.io/docs/prometheus/latest/querying/basics/#staleness) and [time/timestamp functions](https://prometheus.io/docs/prometheus/latest/querying/functions/#timestamp).
 
-**Check:** the configured counter equals the number of table rows. Select a check in Explore and compare its displayed state with `up` and `probe_success`. A failing exporter must never create a green Up row.
+Once a target is removed or its `up` series becomes stale, it disappears from current inventory; the fallback cannot preserve a target whose `up` is absent. Compare with the agreed list after target edits. An entirely absent job must read **Unknown/No data**, not healthy zero.
+
+### Summary counters
+
+**Visible probe checks:**
+
+```promql
+count(up{job="blackbox",group=~"$group",service=~"$service"})
+```
+
+This counts currently queryable `up` series, including failed scrapes. It does not prove that all intended checks have been configured.
+
+**Failed destination checks:**
+
+```promql
+count((
+  probe_success{job="blackbox",group=~"$group",service=~"$service"}
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+) == 0)
+or (0 * count(up{job="blackbox",group=~"$group",service=~"$service"}))
+```
+
+**Unknown probe checks:**
+
+```promql
+count(((
+  probe_success{job="blackbox",group=~"$group",service=~"$service"}
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+)
+or on(job,instance,module,group,service,host,owner,contact,dependencies)
+(-1 + 0 * up{job="blackbox",group=~"$group",service=~"$service"})) == -1)
+or (0 * count(up{job="blackbox",group=~"$group",service=~"$service"}))
+```
+
+For both fault counters, use absolute thresholds **base green, 1 red**. The Unknown counter includes failed scrapes, missing `probe_success` and old samples while `up` remains visible. Both fallbacks produce zero only while selected inventory exists. Read all three counters together; zero failed checks with unknown checks is inconclusive.
+
+**Check:** the visible counter equals the number of table rows. Compare one check with its `up`, `probe_success` and sample ages in Explore. Fresh passing/failed probes give 1/0; a failed scrape, missing success metric or old sample gives Unknown. Empty inventory gives No data. A failing exporter must not leave a green row after the next failed scrape or freshness deadline.
 
 ---
 
 ## 6. Understand or build the trend panels
+
+**If you imported the template:** status history, HTTP duration, availability and sample coverage already exist with the queries and settings below. Complete the final time-range **Check**; the remaining instructions are reference or manual-build instructions. For an older import, apply the status-history resolution fix in step 3 if you have not done so yet.
 
 The status-history and HTTP-duration panels use query type **Range**, format **Time series**, and the dashboard time range. The availability and coverage Stats use **Instant** queries over that period. Leave **Connect null values** at **Never** where available. Do not replace gaps with zero or carry the last healthy state through a gap.
 
@@ -224,7 +258,7 @@ For **Probe status history**, paste the complete current-check expression from s
 | No value / Connect null values | Unknown / Never |
 | Panel width | Full dashboard width |
 
-Open Query options in the **Queries** area beside the data-source selector, or in the footer if the newer query editor is enabled. The point setting is required during panel creation: leaving it on Auto can cause the **1,441 points received** display error. The exact limit depends on the panel's visible width, so use **100** on narrow screens if necessary. Verify the preview, apply the changes, save and check the normal dashboard view before adding the next panel. Step 3 includes the same settings in the import template.
+Open Query options in the **Queries** area beside the data-source selector, or in the footer if the newer query editor is enabled. The fixed point setting helps keep a consistent query resolution when the panel is resized. A status-history error depends on the returned data and visible width, so use **100** on narrow screens if needed; the acceptance check remains required. Verify the preview, apply the changes, save and check the normal dashboard view before adding the next panel. Step 3 includes the same settings in the import template.
 
 Status history displays sampled values as colored cells; see [Grafana's status history documentation](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/status-history/). A long time range with this resolution can omit brief failures between evaluation points. Zoom to **Last 15 minutes** for 30-second detail; use the current table and fault counters for current faults.
 
@@ -232,40 +266,43 @@ For **Successful HTTP probe duration**:
 
 ```promql
 (
-  probe_duration_seconds{job="blackbox",module="http_2xx",group=~"$group",service=~"$service"}
-  and on(job,instance,module,group,service,host)
-  (probe_success{job="blackbox",module="http_2xx",group=~"$group",service=~"$service"} == 1)
+  probe_duration_seconds{job="blackbox",group=~"$group",service=~"$service",module="http_2xx"}
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (probe_success{job="blackbox",group=~"$group",service=~"$service",module="http_2xx"} == 1)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service",module="http_2xx"}) < $probe_freshness_s)
+  and on(job,instance,module,group,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_duration_seconds{job="blackbox",group=~"$group",service=~"$service",module="http_2xx"}) < $probe_freshness_s)
 )
-and on(job,instance,module,group,service,host)
-(up{job="blackbox",group=~"$group",service=~"$service"} == 1)
 ```
 
-Set a visible threshold at **1 second**, matching the current `ServiceSlow` condition. The chart displays the total successful probe duration, including connection and TLS work. It is not an application's internal response-time histogram. Failures leave gaps and are visible in the history panel above.
+Set a visible threshold at **1 second**, matching `ServiceSlow` as described in the supplied configuration reference; verify the actual loaded rule before claiming the line matches alerting. This is total successful probe duration, including connection and TLS work, not an application response-time histogram. Failed, missing and old probe samples leave gaps.
 
 For **Observed probe availability**, use an Instant query with one result per check:
 
 ```promql
-100 * avg_over_time(
-  probe_success{job="blackbox",group=~"$group",service=~"$service"}[$__range]
-)
+(100 * avg_over_time(probe_success{job="blackbox",group=~"$group",service=~"$service"}[$__range]))
+or on(job,instance,module,group,service,host,owner,contact,dependencies) (-1 + 0 * up{job="blackbox",group=~"$group",service=~"$service"})
 ```
+
+Add a value mapping `-1 → Unknown` (gray). The sentinel covers a visible check with no recorded `probe_success` samples in the selected range; it is not a negative percentage.
 
 For **Probe sample coverage**, also use Instant:
 
 ```promql
 clamp_max(
-  100 * count_over_time(
-    probe_success{job="blackbox",group=~"$group",service=~"$service"}[$__range]
-  ) / ($__range_s / 30),
+  100 * count_over_time(probe_success{job="blackbox",group=~"$group",service=~"$service"}[$__range]) / ($__range_s / $probe_interval_s),
   100
 )
+or on(job,instance,module,group,service,host,owner,contact,dependencies) (0 * up{job="blackbox",group=~"$group",service=~"$service"})
 ```
 
-Use the same legend for both: `{{service}} @ {{host}} / {{module}} / {{instance}}`. `$__range` and `$__range_s` are Grafana time-range variables. The coverage estimate assumes the repo's 30-second scrape interval; change the denominator if you change that interval. It is approximate at range boundaries and during timing jitter.
+Use legend `{{group}} / {{service}} @ {{host}} / {{module}} / {{instance}}` for both. `$__range` and `$__range_s` are Grafana time-range variables. Coverage uses `probe_interval_s` from step 1. The estimate is approximate at boundaries and with timing jitter and is clamped at 100%; use a range substantially longer than one scrape interval.
 
-Availability means **the fraction of recorded samples that succeeded**. An exporter outage creates missing samples, not failed destination samples, so 100% availability with low coverage is inconclusive. A target added an hour ago has low coverage for a six-hour view. Changing target labels starts a new series. Neither panel is a verified monthly SLO or a combined multi-check service SLI. Agree those semantics separately. See [Prometheus's over-time functions](https://prometheus.io/docs/prometheus/latest/querying/functions/#aggregation_over_time).
+Availability is the **fraction of recorded samples that succeeded**, with each sample weighted equally. Missing samples are excluded. A visible check with no samples has Unknown availability and 0% coverage. A monitoring outage can therefore leave 100% availability with poor coverage; that is inconclusive. New targets, label changes, retention and monitoring gaps lower coverage for a longer view. Historical series with samples can remain in these period summaries after the target is removed. Neither panel is a verified monthly SLO or combined service SLI. See [Prometheus over-time functions](https://prometheus.io/docs/prometheus/latest/querying/functions/#aggregation_over_time).
 
-**Check:** change Last 6 hours to Last 24 hours and Last 7 days. Status history must render without a point-limit error in the normal dashboard view. The selected period changes the graphs and the availability window. Coverage exposes missing history. Wait for real history before claiming a seven-day trend.
+**Check:** change Last 6 hours to Last 24 hours and Last 7 days. Status history must render without a point-limit error in the normal dashboard view. The selected period changes the graphs and the availability window. Coverage exposes missing history. Metadata changes create separate series, so period summaries can show more than one line with the same displayed check name; do not combine their percentages as a service availability measure. Wait for real history before claiming a seven-day trend.
 
 ---
 
@@ -277,13 +314,14 @@ Use the existing physical-host Node Exporter only where its installation is auth
 
 | Quantity | Source | Meaning |
 |---|---|---|
-| Allocated vCPU and memory | Proxmox API | Configured capacity per VM/LXC, including stopped guests |
+| CPU capacity | Proxmox API | API-reported `maxcpu`; reconcile it with the approved charging policy. For LXC it may fall back from configured cores to CPU limit to host CPU count; see the [Proxmox LXC implementation](https://github.com/proxmox/pve-container/blob/master/src/PVE/LXC.pm). It is not a reservation or a verified quota. |
+| Memory capacity | Proxmox API | API-reported maximum memory per VM/LXC, including stopped guests when exposed |
 | CPU and memory used | Proxmox API | Hypervisor-reported current usage; compare with the same Proxmox summary |
 | Allocated disk | Reviewed guest disk inventory | All provisioned disks charged under the agreed policy |
 | Approved group budget | Approved resourcebudget document | Constant reference values; updated when the allocation decision changes |
 | Filesystem free space | Node Exporter on an approved guest | Space available inside that filesystem, distinct from storage allocation |
 
-The budget bars show allocation divided by the approved budget. They do not enforce quotas in Proxmox. Runtime CPU usage and memory consumption have their own trends. For example, a group allocated 6 of 8 vCPU is at **75% of its allocation budget**, even when its machines are idle.
+The budget bars show allocation divided by the approved budget. They do not enforce quotas in Proxmox. Runtime CPU usage and memory consumption have their own trends. For example, a group charged 6 CPU units against an approved budget of 8 is at **75% of its CPU budget**, even when its machines are idle. That interpretation requires the API CPU-capacity values to match the approved charging policy.
 
 **Check:** the resource guide's acceptance checks pass for the intended scope. If school API access is pending, keep the health dashboard as the completed part and record the resource dashboard as pending; a home exporter is not evidence of Smith coverage.
 
@@ -291,57 +329,38 @@ The budget bars show allocation divided by the approved budget. They do not enfo
 
 ## 8. Import and verify the Smith dashboard
 
-1. Copy [smith-resources-dashboard-template.json](../smith-resources-dashboard-template.json) to a local `smith-resources-dashboard.json`.
-2. Replace the three title/description/environment placeholders. Suggested title: **Smith resources and budgets**. Explain the agreed scope and that disk allocation is reviewed inventory.
-3. Import it using the same new-dashboard procedure as step 3 and select the school's Prometheus source.
-4. Select the `group` filter. It comes from `noc_guest_info`; **All** displays separate series per group, rather than averaging percentages across groups.
-5. Use Last 6 hours and 30s refresh. Recording rules update once per minute.
+1. Complete [smith-resource-metrics.md](smith-resource-metrics.md), using the existing exporter and single `pve` scrape where present. Load the reviewed inventory, budgets and recording rules before importing.
+2. Copy [smith-resources-dashboard-template.json](../smith-resources-dashboard-template.json) to a local `smith-resources-dashboard.json`.
+3. Replace the title/description/environment placeholders. Suggested title: **Smith resources and budgets**. Describe the agreed scope, CPU charging policy and reviewed disk inventory.
+4. Import using the new-dashboard procedure in step 3, choose the intended Prometheus source and keep the catalogue UID unchanged.
+5. Select `group`. Its options include reviewed inventory groups and approved budget groups. **All** keeps separate series per group instead of averaging percentages.
+6. Use Last 6 hours ending at now and 30s refresh. The resource recording group is configured to evaluate every minute; verify it is loaded and healthy.
 
-The template's panels use the normalized metrics from the resource guide:
+The JSON is the panel/query reference. The resource guide defines each normalized metric and the exact source, inventory and budget acceptance checks. Interpret the panels as follows:
 
-| Panel | Query | Type / unit |
-|---|---|---|
-| Proxmox scrape health | `min(up{job="pve"})` | Stat; Instant; 1 Up green, 0 Failed red; No value Unknown |
-| Guests missing resource metrics | See expression below | Stat; Instant; base green, 1 red |
-| Unmapped visible Smith guests | `count(noc_smith_unmapped_guest_info) or (0 * count(noc_guest_scope))` | Stat; Instant; base green, 1 red; global scope |
-| vCPU allocation / approved budget | `100 * noc_group_cpu_allocated_cores{group=~"$group"} / on(group) noc_group_cpu_budget_cores{group=~"$group"}` | Bar gauge; Instant; percent |
-| Memory allocation / approved budget | `100 * noc_group_memory_allocated_bytes{group=~"$group"} / on(group) noc_group_memory_budget_bytes{group=~"$group"}` | Bar gauge; Instant; percent |
-| Reviewed disk allocation / approved budget | `100 * noc_group_disk_allocated_bytes{group=~"$group"} / on(group) noc_group_disk_budget_bytes{group=~"$group"}` | Bar gauge; Instant; percent |
-| Group vCPU: used, allocated, budget | The three corresponding `noc_group_cpu_*` metrics with `{group=~"$group"}` | Time series; Range; cores |
-| Group memory: used, allocated, budget | The three corresponding `noc_group_memory_*` metrics with `{group=~"$group"}` | Time series; Range; bytes (IEC) |
-| Reviewed group disk: allocated, budget | `noc_group_disk_allocated_bytes` and `noc_group_disk_budget_bytes` with the group filter | Time series; Range; bytes (IEC) |
-| Guest CPU / allocated vCPU | `100 * noc_guest_cpu_used_cores{group=~"$group"} / noc_guest_cpu_allocated_cores{group=~"$group"}` | Time series; Range; percent |
-| Guest memory / allocated memory | `100 * noc_guest_memory_used_bytes{group=~"$group"} / noc_guest_memory_allocated_bytes{group=~"$group"}` | Time series; Range; percent |
-| Resource inventory | `noc_guest_info{group=~"$group"}` | Table; Instant; Group, Host and Guest ID |
+| Panel category | Meaning / required check |
+|---|---|
+| Proxmox scrape health | Source readiness requires exactly one configured PVE target, a successful scrape and an `up` sample younger than 90s. Unknown, absent or failed readiness prevents trusting live CPU/memory totals. Adjust the rule tolerance when collection differs from 30s. |
+| Missing resource metrics | Inventoried guests missing a required normalized CPU/memory value; detail rows identify them. An affected group’s relevant live total is hidden instead of showing a partial sum. |
+| Unmapped visible Smith guests | Global scope: API-visible Smith guests with no reviewed mapping; an unmapped guest cannot be reliably assigned to a group filter. The detail table supports reconciliation. |
+| Missing/invalid budgets | Groups without all three positive approved budgets. Missing or zero budgets must not create meaningful percentages. |
+| Duplicate guest IDs | Global API/inventory identity conflicts. Resolve the source or mapping; duplicates are filtered before joins so they cannot silently double-count totals. A detail table identifies conflicts. |
+| CPU/memory budget bars and trends | API capacity and reported use compared with approved group reference values. Reconcile CPU API capacity with the charging policy, particularly for LXC. Capacity is not CPU busy time and is not a guaranteed reservation. |
+| Reviewed disk bar/trend | Provisioned disk amounts from the reviewed inventory, not physical storage consumption. This static data can remain visible while the API fails. |
+| Guest utilization | Hypervisor-reported usage relative to the corresponding API capacity. Compare like-for-like with the Proxmox summary and inspect collector semantics before treating it as guest-internal usage. |
+| Resource inventory | Reviewed mapping, not proof of automatic discovery, running state or complete API permissions. |
 
-The missing-metrics counter checks all four live resource metrics:
+Budget display thresholds are proposed **80 yellow / 95 red**; obtain the budget owner’s agreement. Bar maximum 100 visually fills at an exceeded budget, so retain the numeric label above 100. These display thresholds neither enforce Proxmox quotas nor create email alerts.
 
-```promql
-count(
-  noc_guest_info{group=~"$group"}
-  unless on(id) (
-    noc_guest_cpu_allocated_cores
-    and on(id) noc_guest_cpu_used_cores
-    and on(id) noc_guest_memory_allocated_bytes
-    and on(id) noc_guest_memory_used_bytes
-  )
-)
-or (0 * count(noc_guest_info{group=~"$group"}))
-```
+A fresh PVE scrape does not prove that the underlying Proxmox host statistics are fresh; compare the API readings with node health and the Proxmox summary at similar times. Use **Unknown** for missing values. Keep used/capacity/budget trend lines unstacked and gaps disconnected: these are comparisons, not additive amounts. A budget line records the reference configured at that time; it is not evidence of approval by itself.
 
-Set budget bar thresholds to absolute **base green, 80 yellow, 95 red**. Use percent (0–100), min 0, max 100, decimals 1; disable automatic min/max in the bar gauge. Values above 100 must retain their numeric label so an exceeded budget is visible. These are proposed display thresholds; agree them with the budget owner. They do not create email alerts.
-
-Set No value to **Unknown**. Use legend `{{group}} used`, `{{group}} allocated` and `{{group}} budget` for group trends; guest legends include `{{host}} / {{id}}`. Do not stack the three quantities: usage, allocation and budget are comparisons, not additive amounts. Keep gaps disconnected.
-
-The unmapped-guest counter is intentionally global: an unmapped VM has no reliable group to filter by. The disk bar and disk trend remain available from reviewed inventory even when the API fails; their titles make that distinction explicit. A budget line is a historical record of the configured approved reference, not automatic evidence of approval.
-
-**Check:** verify both fault counters are 0, the API scrape is Up, and the selected inventory matches the approved list. Compare at least one guest's vCPU/RAM and one group's totals with Proxmox and the resourcebudget. CPU/RAM totals disappear for a group missing an inventoried guest's relevant metrics; they must not show a falsely low total.
+**Check:** source readiness is Up, all diagnostic counters have the expected results, and every detail table has been reconciled against the approved scope. Empty tables or zero counters cannot prove ACL coverage: the API may hide guests the token cannot see. Compare the approved list independently. Compare at least one guest and group with Proxmox and approved budgets. Verify one LXC CPU value against its cores/CPU limit if the scope includes LXC; verify every provisioned disk charged by policy. Test missing metrics/source/duplicate IDs in a separate test setup. CPU/memory totals must become Unknown/No data for incomplete or invalid live data, while static disk values remain explicitly marked as reviewed inventory.
 
 ---
 
 ## 9. Add an existing filesystem-capacity trend (optional)
 
-The current stack already has node filesystem metrics. Add this Time series panel to the resource dashboard if you want to show noc-core's real disk-space trend:
+The supplied stack describes Node Exporter filesystem metrics; confirm they exist and represent the intended mounts. Add this Time series panel to the resource dashboard if you want to show noc-core's real disk-space trend:
 
 ```promql
 100 * (
@@ -350,7 +369,7 @@ The current stack already has node filesystem metrics. Add this Time series pane
 )
 ```
 
-Title it **noc-core filesystem space unavailable (%)**, unit percent (0–100), legend `{{mountpoint}} / {{device}}`, thresholds 80 yellow and **85 red** to match the existing less-than-15%-available disk alert. This uses `avail`, so reserved filesystem space counts as unavailable to normal users. It does not measure the group's provisioned disk allocation.
+Title it **noc-core filesystem space unavailable (%)**, unit percent (0–100), legend `{{mountpoint}} / {{device}}`, thresholds 80 yellow and **85 red**, corresponding to the supplied reference’s less-than-15%-available disk condition (equality at 85% is a display threshold; the rule’s comparison is strict). Verify the loaded alert threshold and collector mounts first. This uses `avail`, so reserved filesystem space counts as unavailable to normal users. It does not measure the group's provisioned disk allocation.
 
 For an approved VM/guest exporter, replace `noc-core` with its exact `host` label. Confirm the intended mounts against `df -h` on that guest before adding them. Do not sum duplicated mount views or use a VM's zero Proxmox disk-usage value as proof that its filesystem is empty.
 
@@ -367,16 +386,18 @@ Use a disposable service you control for failure tests. Agree the test window wi
 | Persistence | Save both dashboards, close/reopen Grafana | Both are under Dashboards; the catalogue still opens |
 | Group filter | Select one group, then All | Every health panel follows the selection; resource totals remain separate per group |
 | Failed destination | Stop the disposable service while its scrape remains healthy, then restore it | Table Down, failed-check count increases, red history segment, then Up/green; record detection/recovery times |
-| Failed monitoring | In a home/test stack, add a temporary probe with an invalid module name, wait for discovery, then remove it | Its `/probe` scrape fails: row Unknown, scrape-failure count increases; verify `up=0` in Explore |
-| Alert timing | Observe the disposable failure for long enough if testing alerting too | Dashboard changes on the first failed scrape; `ServiceDown` fires only after its existing 2-minute hold plus evaluation delay |
+| Failed monitoring | In a home/test stack, add a temporary probe with an invalid module name, wait for discovery, then remove it | Its `/probe` scrape fails: row Unknown, Unknown-check count increases; verify `up=0` in Explore |
+| Alert timing | Observe the disposable failure for long enough if testing alerting too | Dashboard changes on the first failed scrape; `ServiceDown` follows its loaded `for` duration (the supplied reference says 2m) plus rule-evaluation timing; email adds Alertmanager routing/group delays |
 | Latency | Compare the chart with successful HTTP duration in Explore | Seconds and 1-second reference line agree; failures are gaps, not zero latency |
 | Resource allocation | Compare an inventoried guest and its group with Proxmox and approved budgets | Allocated vCPU/RAM, disk inventory and percentages have a traceable source |
 | Missing guest | On a home/test setup, use a nonexistent ID in a temporary inventory entry and remove it afterward | Missing-metrics count increases; the affected group's live total becomes Unknown/No data |
-| Missing API | On a home/test setup, stop only `pve-exporter`, then start it | API health fails; live resource panels lose data after the next rule evaluation; disk inventory stays explicitly reviewed/static |
+| Missing API | On a home/test setup, stop only `pve-exporter`, then start it | API health fails; live CPU/memory panels lose data after the failed scrape and next successful rule evaluation (or the source freshness deadline if scraping stops); disk inventory stays explicitly reviewed/static |
 | History | Review 6h, 24h and 7d as data accumulates; zoom to 15m for short failure tests | No point-limit error; sampled changes, gaps and coverage are visible; brief failures are checked at 30-second resolution; no claim of history before collection began |
 | Transfer/restore | Export Classic JSON with the external-sharing option, import on a test Grafana and select its source | The imported dashboards work with the destination's metrics; retain restore screenshots |
 
 For the invalid-module test, copy one complete disposable target block to a separate temporary target file, give it unique service/host labels and set `module: dashboard_test_invalid`. Do not edit `blackbox.yml` or existing targets. Remove that file after the test and verify discovery, counters and alerts return to their prior state. This exercises a failed probe scrape without interrupting every service check.
+
+Add two query-level checks: a visible target with no `probe_success` must be Unknown in the table, Unknown in availability and 0% in coverage; entirely absent `up` must produce No data/Unknown, never healthy zero. A test fixture or disposable test scrape can exercise these without stopping shared monitoring. Confirm the freshness boundary in a test source: retained samples at or above the configured age are Unknown.
 
 Capture the dashboard name, selected filters, visible time range, timestamp, expected/actual result and tester for each scenario. Keep a record of pending checks. Save sanitized screenshots with the project evidence; review internal addresses, contacts and dependency names before sharing outside the group.
 
@@ -391,7 +412,7 @@ Export each saved dashboard as **Classic JSON** with **Share dashboard with anot
 | Change | Apply it |
 |---|---|
 | Grafana panel or variable | Save dashboard; export a fresh JSON copy |
-| Probe target file | Automatic file discovery; no restart |
+| Probe target file | Automatic file discovery; no restart if the existing `file_sd_configs` glob includes the file; verify target health afterward |
 | Proxmox scrape job or resource rules | Validate with `promtool`, then send Prometheus SIGHUP |
 | Exporter flags/mounts/image in Compose | Validate Compose, then `docker compose up -d pve-exporter` |
 | Exporter credential file | Recreate `pve-exporter` so a single-file mount reads the current file |
@@ -403,7 +424,7 @@ Export each saved dashboard as **Classic JSON** with **Share dashboard with anot
 | Green count but blank status panels | Empty/mismatched filters, metric missing, wrong source | Query `up` and `probe_success`; reset filters to All; Unknown is not healthy |
 | Latency is empty while TCP checks work | No HTTP probes or every HTTP probe is failing | Verify `module="http_2xx"` and successful samples |
 | Availability 100% with poor coverage | Missing scrape samples or a recently added target | Read status history and sample coverage before interpreting availability |
-| Smith panels say No data | Resource guide not applied, rules invalid, wrong case-sensitive node or missing rights | Query `up{job="pve"}`, `pve_guest_info`, `noc_guest_info` and `noc_guest_scope` in order |
+| Smith panels say No data | Resource guide not applied, rules invalid, wrong case-sensitive node or missing rights | Query `up{job="pve"}`, `noc_pve_source_ready`, `pve_guest_info`, `noc_guest_info` and `noc_guest_scope` in order; then inspect diagnostic panels |
 | Resource totals too low | Unmapped/hidden guests, wrong scope or missing per-guest values | Check both coverage counters and compare the authorized API inventory with the agreed guest list |
 | Memory differs from `free` inside the guest | Hypervisor versus guest accounting, cache/ballooning, or LXC Node Exporter limitation | Compare like-for-like with Proxmox; describe the source rather than mixing the figures |
 | Budget percentage is infinite/absent | Zero/missing budget, unit mismatch or wrong group | Use positive approved values; convert GiB to bytes and align group labels |

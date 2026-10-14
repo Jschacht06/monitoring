@@ -1,7 +1,10 @@
 # Copy to prometheus/rules/smith-resources.yml only after filling in every placeholder.
-# The copy is ignored by Git; this template is outside the loaded rules/*.yml folder.
+# Confirm the local copy is Git-ignored; this template is outside rules/*.yml.
 # Last inventory/budget review: <YYYY-MM-DD>; approved by: <budget-owner>.
 # All byte values use bytes, not GiB. 1 GiB = 1073741824 bytes.
+# This recipe supports ONE cluster/API scrape with job="pve". IDs are cluster-local.
+# Freshness limit is 90s for a 30s scrape. Review both if the interval changes.
+# No template VM CPU/RAM accounting: template="1" is excluded from live scope.
 groups:
   - name: noc-smith-resources
     interval: 1m
@@ -39,35 +42,47 @@ groups:
 
       # Everything below is shared: keep one copy, after all budget/inventory entries.
       # Match the exact, case-sensitive API node label; scrape the cluster once.
+      # Healthy source only: absent, failed, duplicate or old source => no live data.
+      - record: noc_pve_source_ready
+        expr: |
+          (count(up{job="pve"}) == 1)
+          and (min(up{job="pve"}) == 1)
+          and (time() - max(timestamp(up{job="pve"})) < 90)
+
       - record: noc_guest_scope
         expr: |
-          (pve_guest_info{job="pve",node="<smith-node-name>",template!="1"}
-            * on(id) group_left(group,host) noc_guest_info)
-          and on(job,instance) (up{job="pve"} == 1)
+          ((pve_guest_info{job="pve",node="<smith-node-name>",template!="1"}
+              and on(id) (count by(id) (pve_guest_info{job="pve"}) == 1))
+            * on(id) group_left(group,host)
+              (noc_guest_info and on(id) (count by(id) (noc_guest_info) == 1)))
+          and on() noc_pve_source_ready
 
       - record: noc_smith_unmapped_guest_info
         expr: |
           (pve_guest_info{job="pve",node="<smith-node-name>",template!="1"}
             unless on(id) noc_guest_info)
-          and on(job,instance) (up{job="pve"} == 1)
+          and on() noc_pve_source_ready
 
       - record: noc_guest_cpu_allocated_cores
         expr: |
-          pve_cpu_usage_limit{job="pve",id=~"qemu/.+|lxc/.+"}
-            * on(id) group_left(group,host,node,name) noc_guest_scope
+          ((pve_cpu_usage_limit{job="pve",id=~"qemu/.+|lxc/.+"} > 0)
+            and on(id) (count by(id) (pve_cpu_usage_limit{job="pve",id=~"qemu/.+|lxc/.+"}) == 1))
+            * on(job,instance,id) group_left(group,host,node,name) noc_guest_scope
       - record: noc_guest_cpu_used_cores
         expr: |
-          (pve_cpu_usage_ratio{job="pve",id=~"qemu/.+|lxc/.+"}
-            * on(job,instance,id) pve_cpu_usage_limit{job="pve",id=~"qemu/.+|lxc/.+"})
-            * on(id) group_left(group,host,node,name) noc_guest_scope
+          ((pve_cpu_usage_ratio{job="pve",id=~"qemu/.+|lxc/.+"} >= 0)
+            and on(id) (count by(id) (pve_cpu_usage_ratio{job="pve",id=~"qemu/.+|lxc/.+"}) == 1))
+            * on(job,instance,id) group_left(group,host,node,name) noc_guest_cpu_allocated_cores
       - record: noc_guest_memory_allocated_bytes
         expr: |
-          pve_memory_size_bytes{job="pve",id=~"qemu/.+|lxc/.+"}
-            * on(id) group_left(group,host,node,name) noc_guest_scope
+          ((pve_memory_size_bytes{job="pve",id=~"qemu/.+|lxc/.+"} > 0)
+            and on(id) (count by(id) (pve_memory_size_bytes{job="pve",id=~"qemu/.+|lxc/.+"}) == 1))
+            * on(job,instance,id) group_left(group,host,node,name) noc_guest_scope
       - record: noc_guest_memory_used_bytes
         expr: |
-          pve_memory_usage_bytes{job="pve",id=~"qemu/.+|lxc/.+"}
-            * on(id) group_left(group,host,node,name) noc_guest_scope
+          ((pve_memory_usage_bytes{job="pve",id=~"qemu/.+|lxc/.+"} >= 0)
+            and on(id) (count by(id) (pve_memory_usage_bytes{job="pve",id=~"qemu/.+|lxc/.+"}) == 1))
+            * on(job,instance,id) group_left(group,host,node,name) noc_guest_scope
 
       # Hide a group's live total when ANY inventoried guest lacks that metric.
       # Unmapped API guests still need review: the dashboard lists them separately.
@@ -93,6 +108,12 @@ groups:
             noc_guest_info unless on(id) noc_guest_memory_used_bytes)
       - record: noc_group_disk_allocated_bytes
         expr: |
-          sum by(group) (noc_guest_disk_allocated_bytes)
+          sum by(group) (
+            (noc_guest_disk_allocated_bytes >= 0)
+            and on(id) (count by(id) (noc_guest_disk_allocated_bytes) == 1)
+            unless on(id) (
+              noc_guest_info unless on(id,group,host) noc_guest_disk_allocated_bytes))
           unless on(group) count by(group) (
-            noc_guest_info unless on(id) noc_guest_disk_allocated_bytes)
+            noc_guest_info unless on(id,group,host) (
+              (noc_guest_disk_allocated_bytes >= 0)
+              and on(id) (count by(id) (noc_guest_disk_allocated_bytes) == 1)))

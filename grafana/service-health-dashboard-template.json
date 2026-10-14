@@ -84,15 +84,87 @@
         "options": [],
         "hide": 0,
         "regex": ""
+      },
+      {
+        "name": "probe_interval_s",
+        "type": "constant",
+        "query": "30",
+        "current": {
+          "text": "30",
+          "value": "30"
+        },
+        "options": [
+          {
+            "text": "30",
+            "value": "30",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Actual Blackbox scrape interval in seconds. Used only for coverage. Also set the status-history Min interval and the Prometheus datasource Scrape interval."
+      },
+      {
+        "name": "probe_freshness_s",
+        "type": "constant",
+        "query": "90",
+        "current": {
+          "text": "90",
+          "value": "90"
+        },
+        "options": [
+          {
+            "text": "90",
+            "value": "90",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Maximum accepted up/probe sample age in seconds, exclusive. Default90 assumes30s scrapes; choose a tolerance longer than normal scrape completion/jitter."
+      },
+      {
+        "name": "probe_interval_s",
+        "type": "constant",
+        "query": "30",
+        "current": {
+          "text": "30",
+          "value": "30"
+        },
+        "options": [
+          {
+            "text": "30",
+            "value": "30",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Actual Blackbox scrape interval in seconds. Used only for coverage. Also set the status-history Min interval and the Prometheus datasource Scrape interval."
+      },
+      {
+        "name": "probe_freshness_s",
+        "type": "constant",
+        "query": "90",
+        "current": {
+          "text": "90",
+          "value": "90"
+        },
+        "options": [
+          {
+            "text": "90",
+            "value": "90",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Maximum accepted up/probe sample age in seconds, exclusive. Default90 assumes30s scrapes; choose a tolerance longer than normal scrape completion/jitter."
       }
     ]
   },
   "panels": [
     {
       "id": 1,
-      "title": "Configured probe checks",
+      "title": "Visible probe checks",
       "type": "stat",
-      "description": "Number of configured destination probes, including failed scrapes. No inventory is Unknown.",
+      "description": "Checks with a currently queryable up series, including failed scrapes. This is observed monitoring inventory, not proof of complete service coverage. Missing inventory is Unknown/No data.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -166,7 +238,7 @@
       "id": 2,
       "title": "Failed destination checks",
       "type": "stat",
-      "description": "Failed destination checks only when the probe scrape works. Zero alone does not prove every check is known.",
+      "description": "Failed destination checks only with fresh probe_success and a fresh successful scrape. Zero alone does not prove every expected check is monitored or known.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -184,7 +256,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(\n  (probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 0)\n  and on(job,instance,module,group,service,host) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n) or (0 * count(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}))",
+          "expr": "count((\n  probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n) == 0)\nor (0 * count(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}))",
           "refId": "A",
           "format": "time_series",
           "instant": true,
@@ -242,9 +314,9 @@
     },
     {
       "id": 3,
-      "title": "Probe scrape failures",
+      "title": "Unknown probe checks",
       "type": "stat",
-      "description": "Failed monitoring scrapes. Destination health is Unknown during these failures.",
+      "description": "Visible checks with failed scrapes, missing probe_success or samples older than probe_freshness_s (default 90s for 30s scrapes). Missing inventory gives Unknown/No data, not 0.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -262,7 +334,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 0) or (0 * count(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}))",
+          "expr": "count(((\n  probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n)\nor on(job,instance,module,group,service,host,owner,contact,dependencies)\n(-1 + 0 * up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"})) == -1)\nor (0 * count(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}))",
           "refId": "A",
           "format": "time_series",
           "instant": true,
@@ -322,7 +394,7 @@
       "id": 4,
       "title": "Current probe checks",
       "type": "table",
-      "description": "One row per configured probe. Up=1, Down=0, Unknown=-1 (failed scrape or missing success metric). Removed targets eventually disappear.",
+      "description": "One row per visible probe:1 passed,0 failed,-1 unknown. Known states require successful fresh up and fresh probe_success samples (default<90s). Removed targets eventually disappear; compare with agreed inventory.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -340,7 +412,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(\n  probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}\n  and on(job,instance,module,group,service,host)\n  (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n)\nor on(job,instance,module,group,service,host)\n(-1 + 0 * up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"})",
+          "expr": "(\n  probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n)\nor on(job,instance,module,group,service,host,owner,contact,dependencies)\n(-1 + 0 * up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"})",
           "refId": "A",
           "format": "table",
           "instant": true,
@@ -474,7 +546,7 @@
       "id": 5,
       "title": "Probe status history",
       "type": "status-history",
-      "description": "Range samples: Up green, Down red, Unknown gray. Gaps are not filled. Query resolution uses Max data points 200 and Min interval 30s; long time ranges can miss short outages. Zoom to Last 15 minutes for scrape-level detail.",
+      "description": "Sampled probe status at each query step: Up green, Down red, Unknown gray. Freshness is evaluated at each step. Max data points 200 and Min interval 30s coarsen long periods and can miss brief failures. Gaps are not filled.",
       "maxDataPoints": 200,
       "interval": "30s",
       "datasource": {
@@ -494,7 +566,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(\n  probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}\n  and on(job,instance,module,group,service,host)\n  (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n)\nor on(job,instance,module,group,service,host)\n(-1 + 0 * up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"})",
+          "expr": "(\n  probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n)\nor on(job,instance,module,group,service,host,owner,contact,dependencies)\n(-1 + 0 * up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"})",
           "refId": "A",
           "format": "time_series",
           "instant": false,
@@ -549,7 +621,8 @@
             "mode": "thresholds"
           },
           "custom": {
-            "spanNulls": false
+            "lineWidth": 0,
+            "fillOpacity": 100
           }
         },
         "overrides": []
@@ -571,7 +644,7 @@
       "id": 6,
       "title": "Successful HTTP probe duration",
       "type": "timeseries",
-      "description": "Total successful HTTP probe duration in seconds. Failures create gaps. 1s matches the ServiceSlow threshold.",
+      "description": "Total successful HTTP probe duration in seconds, filtered to fresh successful scrapes/probes. Includes connection/TLS work. Failures create gaps.1s is a suggested threshold; verify the actual ServiceSlow rule.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -589,7 +662,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(\n  probe_duration_seconds{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"}\n  and on(job,instance,module,group,service,host)\n  (probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"} == 1)\n)\nand on(job,instance,module,group,service,host) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)",
+          "expr": "(\n  probe_duration_seconds{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"}\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_duration_seconds{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"}) < $probe_freshness_s)\n)",
           "refId": "A",
           "format": "time_series",
           "instant": false,
@@ -661,7 +734,7 @@
       "id": 7,
       "title": "Observed probe availability",
       "type": "stat",
-      "description": "Percentage of recorded samples that succeeded in the selected range, per check. Missing samples are excluded: interpret together with coverage; this is not a verified service SLO.",
+      "description": "Percentage of recorded probe_success samples that succeeded over the selected period. Missing samples are excluded; visible checks without samples map to Unknown. Historical series can remain after removal. Read with coverage; this is not a service SLO.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -679,7 +752,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "100 * avg_over_time(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}[$__range])",
+          "expr": "(100 * avg_over_time(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}[$__range]))\nor on(job,instance,module,group,service,host,owner,contact,dependencies) (-1 + 0 * up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"})",
           "refId": "A",
           "format": "time_series",
           "instant": true,
@@ -692,6 +765,24 @@
           "unit": "percent",
           "noValue": "Unknown",
           "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
             {
               "type": "special",
               "options": {
@@ -737,7 +828,7 @@
       "id": 8,
       "title": "Probe sample coverage",
       "type": "stat",
-      "description": "Approximate sample coverage over the selected range, assuming the current 30s scrape interval. New targets, label changes and monitoring outages reduce coverage.",
+      "description": "Approximate recorded probe_success samples / expected samples, using probe_interval_s (default 30). Visible checks with no samples in the period show 0. New targets, label changes, monitoring outages and retention reduce coverage; historical removed targets can remain.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -755,7 +846,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "clamp_max(100 * count_over_time(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}[$__range]) / ($__range_s / 30), 100)",
+          "expr": "clamp_max(\n  100 * count_over_time(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}[$__range]) / ($__range_s / $probe_interval_s),\n  100\n)\nor on(job,instance,module,group,service,host,owner,contact,dependencies) (0 * up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"})",
           "refId": "A",
           "format": "time_series",
           "instant": true,

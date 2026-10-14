@@ -15,8 +15,8 @@
   "editable": true,
   "id": null,
   "uid": null,
-  "title": "<your dashboard title here>",
-  "description": "<your description here>",
+  "title": "Smith resource capacity and approved budgets",
+  "description": "API-reported CPU/RAM capacity and usage for a reviewed single-cluster guest inventory, with approved group budgets and reviewed provisioned disk allocation. Requires local inventory/rules and coverage reconciliation; not complete physical storage or CPU quota accounting.",
   "tags": [
     "<your environment tag here>",
     "smith-resources",
@@ -41,9 +41,9 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(noc_guest_info, group)",
+        "definition": "label_values({__name__=~\"noc_guest_info|noc_group_cpu_budget_cores|noc_group_memory_budget_bytes|noc_group_disk_budget_bytes\"}, group)",
         "query": {
-          "query": "label_values(noc_guest_info, group)",
+          "query": "label_values({__name__=~\"noc_guest_info|noc_group_cpu_budget_cores|noc_group_memory_budget_bytes|noc_group_disk_budget_bytes\"}, group)",
           "refId": "var-group"
         },
         "refresh": 1,
@@ -66,7 +66,7 @@
       "id": 1,
       "title": "Proxmox scrape health",
       "type": "stat",
-      "description": "1=Up, 0=Failed; no configured scrape=Unknown. A successful scrape alone does not prove complete guest permissions.",
+      "description": "1=Up, 0=Failed; absent, duplicate or >=90s-old PVE scrape=Unknown. Exactly one job=pve target is supported. Success does not prove complete guest permissions or fresh underlying Proxmox host statistics.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -84,7 +84,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "min(up{job=\"pve\"})",
+          "expr": "min(up{job=\"pve\"})\n  and on() (count(up{job=\"pve\"}) == 1)\n  and on() (time() - max(timestamp(up{job=\"pve\"})) < 90)",
           "refId": "A",
           "format": "time_series",
           "instant": true,
@@ -100,13 +100,13 @@
             {
               "type": "value",
               "options": {
-                "1": {
-                  "text": "Up",
-                  "color": "green"
-                },
                 "0": {
                   "text": "Failed",
                   "color": "red"
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green"
                 }
               }
             },
@@ -157,7 +157,7 @@
       "id": 2,
       "title": "Guests missing resource metrics",
       "type": "stat",
-      "description": "Inventoried guests missing any required CPU/memory metric. A nonzero result requires reconciliation.",
+      "description": "Reviewed guests missing any required CPU/memory metric, including suppressed ambiguous identities or invalid source/capacity. Nonzero requires reconciliation; no reviewed inventory is Unknown. Use the detail table below.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -235,7 +235,7 @@
       "id": 3,
       "title": "Unmapped visible Smith guests",
       "type": "stat",
-      "description": "Global count, independent of group selection. Visible Smith guests without a mapping mean the view is partial.",
+      "description": "Global count independent of group selection. Visible Smith guests without a mapping indicate a scoped/partial view. Unknown when the API source is invalid. Zero does not establish that a token can see every approved guest; reconcile the approved list.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -253,7 +253,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(noc_smith_unmapped_guest_info) or (0 * count(noc_guest_scope))",
+          "expr": "count(noc_smith_unmapped_guest_info) or (0 * noc_pve_source_ready)",
           "refId": "A",
           "format": "time_series",
           "instant": true,
@@ -311,9 +311,9 @@
     },
     {
       "id": 4,
-      "title": "vCPU allocation / approved budget",
+      "title": "API CPU capacity / approved vCPU budget",
       "type": "bargauge",
-      "description": "Configured vCPU, including stopped inventoried guests, divided by the approved group budget. This is allocation, not CPU busy time.",
+      "description": "API-reported available guest CPU capacity, including stopped guests when the API reports it, divided by approved group vCPU budget. Reconcile maxcpu with the approved allocation policy; it is not a CPU reservation/quota. Missing/nonpositive/duplicate budgets produce no bar. Colors are display thresholds, not alerts.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -331,7 +331,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "100 * noc_group_cpu_allocated_cores{group=~\"$group\"} / on(group) noc_group_cpu_budget_cores{group=~\"$group\"}",
+          "expr": "100 * noc_group_cpu_allocated_cores{group=~\"$group\"} / on(group) (noc_group_cpu_budget_cores{group=~\"$group\"} > 0 and on(group) (count by(group) (noc_group_cpu_budget_cores{group=~\"$group\"}) == 1))",
           "refId": "A",
           "format": "time_series",
           "instant": true,
@@ -398,9 +398,9 @@
     },
     {
       "id": 5,
-      "title": "Memory allocation / approved budget",
+      "title": "API memory capacity / approved budget",
       "type": "bargauge",
-      "description": "Configured memory divided by approved group memory budget. A group total is hidden if an inventoried guest is missing this metric.",
+      "description": "API-reported guest memory capacity divided by the approved group memory budget. Missing guest metrics or missing/nonpositive/duplicate budgets produce no bar. Reconcile hypervisor capacity with approved accounting. Colors are display thresholds, not alerts.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -418,7 +418,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "100 * noc_group_memory_allocated_bytes{group=~\"$group\"} / on(group) noc_group_memory_budget_bytes{group=~\"$group\"}",
+          "expr": "100 * noc_group_memory_allocated_bytes{group=~\"$group\"} / on(group) (noc_group_memory_budget_bytes{group=~\"$group\"} > 0 and on(group) (count by(group) (noc_group_memory_budget_bytes{group=~\"$group\"}) == 1))",
           "refId": "A",
           "format": "time_series",
           "instant": true,
@@ -487,7 +487,7 @@
       "id": 6,
       "title": "Reviewed disk allocation / approved budget",
       "type": "bargauge",
-      "description": "Reviewed provisioned disk inventory divided by approved disk budget. Static inventory stays available during API outages; this is not physical storage consumption.",
+      "description": "Reviewed provisioned disk inventory divided by approved disk budget. Static inventory stays available during API outages; this is not physical storage consumption. Missing/nonpositive/duplicate budgets produce no bar. Colors at 80%/95% are display thresholds, not alerts; actual displayed percentages can exceed 100%.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -505,7 +505,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "100 * noc_group_disk_allocated_bytes{group=~\"$group\"} / on(group) noc_group_disk_budget_bytes{group=~\"$group\"}",
+          "expr": "100 * noc_group_disk_allocated_bytes{group=~\"$group\"} / on(group) (noc_group_disk_budget_bytes{group=~\"$group\"} > 0 and on(group) (count by(group) (noc_group_disk_budget_bytes{group=~\"$group\"}) == 1))",
           "refId": "A",
           "format": "time_series",
           "instant": true,
@@ -572,9 +572,9 @@
     },
     {
       "id": 7,
-      "title": "Group vCPU: used, allocated, budget",
+      "title": "Group CPU: used equivalents, API capacity, budget",
       "type": "timeseries",
-      "description": "Separate group lines; quantities are comparisons, not additive. Null gaps are never connected.",
+      "description": "CPU busy core equivalents, API available CPU capacity, and reviewed approved budget. API capacity must match the budget accounting policy before interpreting it as allocation. Lines are comparisons, not additive; null gaps are not connected.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -610,7 +610,7 @@
           "format": "time_series",
           "instant": false,
           "range": true,
-          "legendFormat": "{{group}} allocated"
+          "legendFormat": "{{group}} API capacity"
         },
         {
           "datasource": {
@@ -684,7 +684,7 @@
     },
     {
       "id": 8,
-      "title": "Group memory: used, allocated, budget",
+      "title": "Group memory: used, API capacity, budget",
       "type": "timeseries",
       "description": "Separate group lines; quantities are comparisons, not additive. Null gaps are never connected.",
       "datasource": {
@@ -722,7 +722,7 @@
           "format": "time_series",
           "instant": false,
           "range": true,
-          "legendFormat": "{{group}} allocated"
+          "legendFormat": "{{group}} API capacity"
         },
         {
           "datasource": {
@@ -895,9 +895,9 @@
     },
     {
       "id": 10,
-      "title": "Guest CPU / allocated vCPU",
+      "title": "Guest CPU / API CPU capacity",
       "type": "timeseries",
-      "description": "Hypervisor-reported usage compared with configured guest capacity. Compare like-for-like with Proxmox.",
+      "description": "Hypervisor-reported usage compared with API-reported available CPU capacity; reconcile with the approved CPU accounting policy.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -981,9 +981,9 @@
     },
     {
       "id": 11,
-      "title": "Guest memory / allocated memory",
+      "title": "Guest memory / API memory capacity",
       "type": "timeseries",
-      "description": "Hypervisor-reported usage compared with configured guest capacity. Compare like-for-like with Proxmox.",
+      "description": "Hypervisor-reported usage compared with API-reported memory capacity. Reconcile with the approved memory accounting policy and compare like-for-like with Proxmox.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1148,6 +1148,426 @@
               "group": "Group",
               "host": "Host",
               "id": "Guest ID"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Groups with missing/invalid budgets",
+      "type": "stat",
+      "description": "Selected inventoried groups without exactly one positive CPU, RAM and disk budget. Zero excludes no failures within that inventory; no inventory is Unknown. An approved group without guest inventory still needs scope review.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(count by(group) (noc_guest_info{group=~\"$group\"})\n  unless on(group) ((noc_group_cpu_budget_cores > 0 and on(group) (count by(group) (noc_group_cpu_budget_cores) == 1))\n    and on(group) (noc_group_memory_budget_bytes > 0 and on(group) (count by(group) (noc_group_memory_budget_bytes) == 1))\n    and on(group) (noc_group_disk_budget_bytes > 0 and on(group) (count by(group) (noc_group_disk_budget_bytes) == 1))))\n  or (0 * count(noc_guest_info{group=~\"$group\"}))",
+          "refId": "A",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 14,
+      "title": "Duplicate guest IDs",
+      "type": "stat",
+      "description": "Global count of IDs duplicated in API guest identity, reviewed ownership or disk inventory. Resolve duplicates before accepting totals; source joins suppress ambiguous live data.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 55,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count((count by(id) (pve_guest_info{job=\"pve\"}) > 1)\n  or (count by(id) (noc_guest_info) > 1)\n  or (count by(id) (noc_guest_disk_allocated_bytes) > 1)) or (0 * count(noc_guest_info))",
+          "refId": "A",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 15,
+      "title": "Guests missing resource metrics",
+      "type": "table",
+      "description": "Reviewed guests lacking one or more required current CPU/RAM metrics. Includes source outages and ambiguous identities. Empty table has meaning only with valid source, complete reviewed inventory, and healthy rules.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "noc_guest_info{group=~\"$group\"} unless on(id) (noc_guest_cpu_allocated_cores\n    and on(id) noc_guest_cpu_used_cores\n    and on(id) noc_guest_memory_allocated_bytes\n    and on(id) noc_guest_memory_used_bytes)",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true
+            },
+            "indexByName": {
+              "group": 0,
+              "host": 1,
+              "id": 2
+            },
+            "renameByName": {
+              "group": "Group",
+              "host": "Host",
+              "id": "Guest ID"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Unmapped visible Smith guests",
+      "type": "table",
+      "description": "Global API-visible non-template Smith guests outside the reviewed mapping. Empty table does not prove full permissions or complete cluster coverage.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 59,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "noc_smith_unmapped_guest_info",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true
+            },
+            "indexByName": {
+              "id": 0,
+              "node": 1,
+              "name": 2,
+              "type": 3
+            },
+            "renameByName": {
+              "id": "Guest ID",
+              "node": "Node",
+              "name": "API name",
+              "type": "Type"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Duplicate guest identity details",
+      "type": "table",
+      "description": "Global list of ambiguous IDs and observed series counts. Reconcile source targets, API identity, ownership and disk inventory using the guide.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(count by(id) (pve_guest_info{job=\"pve\"}) > 1)\n  or (count by(id) (noc_guest_info) > 1)\n  or (count by(id) (noc_guest_disk_allocated_bytes) > 1)",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": false
+            },
+            "indexByName": {
+              "id": 0,
+              "Value": 1
+            },
+            "renameByName": {
+              "id": "Guest ID",
+              "Value": "Observed series count"
             }
           }
         }

@@ -36,7 +36,7 @@
     {
       "id": 2,
       "title": "Every monitored service",
-      "description": "Identity is group/service/host. Checks includes failing scrapes. Identical metadata across checks is required to keep one row per service.",
+      "description": "Current discovered scrape inventory from up, including failing scrapes. One row per group/service/host requires complete identity and identical owner/contact/dependencies across checks. Newly discovered targets need a first scrape; removed targets disappear after staleness processing. API exporter rows are collection checks, not guest inventories.",
       "type": "table",
       "datasource": {
         "type": "prometheus",
@@ -112,7 +112,7 @@
     {
       "id": 1,
       "title": "Services with incomplete catalogue metadata",
-      "description": "Number of service instances (group/service/host) with at least one check missing a required catalogue label. Must be zero after all labels are complete. No data or a query error requires investigation.",
+      "description": "Distinct group/service/host tuples with at least one check missing a required catalogue label. Missing identity labels can merge unrelated checks and undercount services: inspect job/instance/module in Explore. Zero only checks label presence on current up series; placeholders, bad metadata and undiscovered services need manual review. No data or an error requires investigation.",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -175,7 +175,7 @@
     {
       "id": 3,
       "title": "Services missing catalogue metadata",
-      "description": "Services with at least one check missing group, service, host, owner, contact or dependencies. One row per group/service/host. Checks missing metadata counts incomplete checks, including failing scrapes.",
+      "description": "Current up series missing group, service, host, owner, contact or dependencies, grouped by group/service/host. Missing identity labels can merge unrelated checks: inspect job/instance/module in Explore. Checks missing metadata counts incomplete checks, including failing scrapes. Empty/No data is expected only when the top inventory has data and the metadata counter is zero.",
       "type": "table",
       "datasource": {
         "type": "prometheus",
