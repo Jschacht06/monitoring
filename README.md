@@ -1,6 +1,6 @@
 # Monitoring stack
 
-A lightweight Network Operations Center (NOC) built for a student project. It watches services from the outside, using HTTP, TCP and ICMP probes, so it works for services we have no management rights on. It also collects machine metrics with node_exporter where we are allowed to install it. Alerts go out by email, split by severity, with grouping, inhibition, maintenance silences and escalation.
+A lightweight Network Operations Center (NOC) built for a student project. It watches services from the outside, using HTTP and TCP probes, so it works for services we have no management rights on. It also collects machine metrics with node_exporter where we are allowed to install it. Alerts go out by email, split by severity, with grouping, inhibition, maintenance silences and escalation.
 
 The stack runs as Docker Compose on an LXC container called **noc-core** on a Proxmox host.
 
@@ -21,7 +21,6 @@ flowchart LR
     subgraph targets["Monitored services (no management rights)"]
         web["Web services<br/>http_2xx"]
         tcp["TCP ports<br/>tcp_connect"]
-        icmp["Hosts<br/>icmp"]
     end
 
     graf -- "PromQL queries" --> prom
@@ -29,7 +28,6 @@ flowchart LR
     prom -- "scrape /metrics" --> ne
     bb -- "probe" --> web
     bb -- "probe" --> tcp
-    bb -- "ping" --> icmp
     prom -- "firing alerts" --> am
 
     am -- "severity=critical<br/>(30s wait, continue: true)" --> crit["email-critical<br/>[CRITICAL]"]
@@ -44,14 +42,13 @@ flowchart LR
 
 Tested end to end:
 
-- **Black-box probes** (HTTP 2xx, TCP connect, ICMP) through Blackbox Exporter. Targets live in `prometheus/targets/*.yml` and are picked up without a restart (file-based service discovery).
+- **Black-box probes** (HTTP 2xx, TCP connect) through Blackbox Exporter. Targets live in `prometheus/targets/*.yml` and are picked up without a restart (file-based service discovery).
 - **Alert `ServiceDown`** (critical): a probe has been failing for 2 minutes.
 - **Alert `ServiceSlow`** (warning): an HTTP probe succeeds but takes more than 1 s, for 5 minutes.
 - **Alert `DiskSpaceLow`** (warning): less than 15 % free disk space, for 10 minutes.
 - **Alert `MonitoringCheckFailed`** (critical): Prometheus cannot scrape node_exporter or Blackbox Exporter, which means the monitoring itself is blind.
 - **Email routing by severity**: critical and warning go to separate receivers with their own subject and timing.
 - **Grouping**: alerts with the same `alertname` and `host` are bundled into one email.
-- **Inhibition**: a failing ICMP probe on a host suppresses the `ServiceDown` alerts of HTTP probes on the same host.
 - **Maintenance silences** through the Alertmanager UI or `amtool`.
 - **Escalation**: a critical alert that is still firing after 15 minutes also goes to an escalation receiver, and it gets a resolved email too.
 - **Host metrics** for noc-core itself through node_exporter.
@@ -114,7 +111,7 @@ The quick start does not add any probe targets yet. Add your first target file a
 ├── alertmanager/
 │   └── template.yml              # Alertmanager config template; copy to alertmanager.yml and add SMTP + recipients
 ├── blackbox/
-│   └── blackbox.yml              # Blackbox Exporter probe modules: http_2xx, tcp_connect, icmp
+│   └── blackbox.yml              # Blackbox Exporter probe modules: http_2xx, tcp_connect and HTTP variants
 ├── pve/
 │   └── template.yml              # pve-exporter config template; copy to pve.yml (ignored by Git) and add the API token
 ├── prometheus/

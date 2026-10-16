@@ -209,7 +209,7 @@ docker compose exec alertmanager amtool check-config /etc/alertmanager/alertmana
 - `ps`: all six services have the status `Up` (not `Restarting`).
 - `promtool check config`: `SUCCESS`, and it finds 1 rule file.
 - `promtool check rules`: `SUCCESS: 5 rules found`.
-- `amtool check-config`: `SUCCESS`, and it lists 4 receivers and 1 inhibit rule.
+- `amtool check-config`: `SUCCESS`, and it lists 4 receivers and 0 inhibit rules.
 
 If a container keeps restarting, read its log: `docker compose logs --tail=50 <service>`.
 

@@ -7,7 +7,7 @@ Guides for the noc-core monitoring stack, Grafana service catalogue, health dash
 | Guide | What it covers |
 |---|---|
 | [setup.md](setup.md) | Set up Prometheus, Grafana, Blackbox Exporter, Node Exporter and Alertmanager. |
-| [adding-targets.md](adding-targets.md) | Add HTTP, TCP and ICMP probes; verify the results. |
+| [adding-targets.md](adding-targets.md) | Add HTTP and TCP probes; verify the results. |
 | [configuration-reference.md](configuration-reference.md) | What each configuration setting does and why it is set that way. |
 | [how-to-guides.md](how-to-guides.md) | Change alerts, routing, inhibition, receivers and exporters. |
 | [operations-and-troubleshooting.md](operations-and-troubleshooting.md) | Daily commands, applying changes and diagnosing problems. |

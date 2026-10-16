@@ -60,12 +60,5 @@ receivers:
           Subject: '[ESCALATED] {{ .Status | toUpper }}: {{ .GroupLabels.alertname }} on {{ .GroupLabels.host }}'
 
 
-# Inhibit rules to prevent duplicate alerts for the same host/service from different modules (e.g., ICMP and HTTP).
-inhibit_rules:
-  - source_matchers:
-      - alertname="ServiceDown"
-      - module="icmp"
-    target_matchers:
-      - alertname="ServiceDown"
-      - module="http_2xx"
-    equal: [host]
+# No inhibit rules by default: grouping by alertname and host already bundles the alerts of one machine.
+# To add one, see docs/how-to-guides.md#add-or-change-an-inhibit-rule

@@ -18,7 +18,7 @@
 #   (instance is set automatically to the probed address)
 #
 # Available modules are defined in blackbox/blackbox.yml:
-#   http_2xx, http_2xx_insecure, http_grafana_health, tcp_connect, icmp
+#   http_2xx, http_2xx_insecure, http_grafana_health, tcp_connect
 #   (http_2xx_insecure: HTTPS with a self-signed certificate; http_grafana_health: HTTP 200 and the
 #   body must contain "database": "ok", an example of an application check)
 
@@ -43,13 +43,3 @@
 #     owner: John Doe
 #     contact: john.doe@gmail.com
 #     dependencies: network switch, firewall
-#
-# - targets:
-#     - 192.168.1.144
-#   labels:
-#     module: icmp
-#     service: ping
-#     host: server-b
-#     owner: Mark Smith
-#     contact: mark.smith@outlook.com
-#     dependencies: network interface

@@ -1,6 +1,6 @@
 # Adding targets
 
-A **target** is something the NOC probes from the outside: a URL, a TCP port or a host that answers ping. Probes run through the Blackbox Exporter, so the monitored machine needs no agent and we need no management rights on it.
+A **target** is something the NOC probes from the outside: a URL or a TCP port. Probes run through the Blackbox Exporter, so the monitored machine needs no agent and we need no management rights on it.
 
 Targets are **not** listed in `prometheus.yml`. They live in `prometheus/targets/*.yml` and Prometheus reads them through file-based service discovery (`file_sd`). You add a target by editing or creating a file. No restart needed.
 
@@ -44,9 +44,9 @@ Each file is a YAML list of **blocks**. One block holds one or more targets that
 
 | Field | Required | What it does | Where it is used |
 |---|---|---|---|
-| `targets` | yes | What to probe. The format depends on the module: a full URL for `http_2xx`, `host:port` for `tcp_connect`, a bare host or IP for `icmp`. | Becomes the `instance` label (see the relabeling in [configuration-reference.md](configuration-reference.md#job-blackbox)). Shown in alert descriptions ("Probe ... to `<instance>`"). |
-| `module` | yes | Which Blackbox module runs the probe. Must exist in `blackbox/blackbox.yml`: `http_2xx`, `http_2xx_insecure`, `http_grafana_health`, `tcp_connect` or `icmp`. | Passed to Blackbox as `?module=`. `ServiceSlow` only looks at `module="http_2xx"`. The inhibit rule uses it (`icmp` suppresses `http_2xx`). |
-| `service` | yes (catalogue) | Human-readable service name, such as `wiki`, `ssh` or `ping`. | Alert summary: "`<service>` on `<host>` is unreachable". |
+| `targets` | yes | What to probe. The format depends on the module: a full URL for `http_2xx`, `host:port` for `tcp_connect`. | Becomes the `instance` label (see the relabeling in [configuration-reference.md](configuration-reference.md#job-blackbox)). Shown in alert descriptions ("Probe ... to `<instance>`"). |
+| `module` | yes | Which Blackbox module runs the probe. Must exist in `blackbox/blackbox.yml`: `http_2xx`, `http_2xx_insecure`, `http_grafana_health` or `tcp_connect`. | Passed to Blackbox as `?module=`. `ServiceSlow` looks at every module whose name starts with `http_`, not at `tcp_connect`. |
+| `service` | yes (catalogue) | Human-readable service name, such as `wiki`, `ssh` or `speedtest`. | Alert summary: "`<service>` on `<host>` is unreachable". |
 | `host` | yes (catalogue) | The machine, node or PC the service runs on, as a readable name (`pve1`, `server-a`), not an IP address. Use the **same value for every target on the same machine**, including its exporters in `prometheus.yml`. | Alertmanager groups emails by `alertname` and `host`. The inhibit rule matches on `host`. The email subject shows it. |
 | `owner` | yes (catalogue) | Person or team responsible for the service. | Owner column in the service catalogue. Shown in `ServiceDown` and `ServiceSlow` alert descriptions, so the receiver knows whom to contact. Can be used for filtering in Grafana and for routes ([example](how-to-guides.md#add-a-receiver-for-one-owner)). |
 | `contact` | yes (catalogue) | Named contact person and an agreed contact channel, for example a school email address. | Contact person column in the service catalogue. |
@@ -60,6 +60,20 @@ Use consistent lowercase IDs for `service` and `host`, with dashes where appropr
 Write monitored dependencies as `service@host`, and unmonitored infrastructure as `external:<name>`. Separate several entries with `; `, for example `external:docker; prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record. Keep the dependency list as one quoted string, not a YAML list.
 
 Checks for the same service on the same machine must share `service`, `host`, `owner`, `contact` and `dependencies` so they become one row. The health dashboard shows each check as `service · host · module`, so two checks with the same service, host and module look identical there: give them different `service` values. These labels document ownership and dependencies; they do not automatically change alert routing or inhibition. See [service-catalogue.md](../grafana/docs/service-catalogue.md#2-add-the-first-targets-and-their-catalogue-labels) for the catalogue setup.
+
+## Which probe to use
+
+Probe the service itself, not the machine it runs on. The NOC does not use ICMP (ping): firewalls often block it, and a machine that answers ping can still have a dead service.
+
+| The service has... | Use | Notes |
+|---|---|---|
+| a web page or API | `http_2xx` | Point it at a health endpoint if there is one. For `https://` it also checks the certificate. |
+| a web page with a self-signed certificate | `http_2xx_insecure` | The certificate is not verified, but the expiry date is still exported. |
+| a health endpoint that says more than "200" | a custom module like `http_grafana_health` | Checks the response body. |
+| no web page, but an open TCP port (SSH, database, mail) | `tcp_connect` | Only proves that the port accepts connections. SSH on port 22 is a good "is the machine alive" check for a Linux server. |
+| only UDP, or no port at all | nothing from the outside | `ServiceDown` cannot cover it. Write that in the catalogue and cover it another way (an exporter, Proxmox guest status). |
+
+A failing `tcp_connect` tells you something about the cause. A refused connection fails at once: the machine is up and the service is stopped. A timeout after 5 s means the machine or the network path is unreachable. Behind a reverse proxy or load balancer a TCP check can pass while the application behind it is dead, so use HTTP there.
 
 ## Examples
 
@@ -80,24 +94,6 @@ Passes when the URL answers with a 2xx status within 5 s. Redirects are followed
 ```
 
 Point it at a health endpoint if the service has one (for example `/health` or `/api/health`). That is a better signal than the start page.
-
-### Host with ICMP (`icmp`)
-
-Passes when the host answers ping. The target is a bare IP or hostname, without a scheme or port.
-
-```yaml
-- targets:
-    - 192.168.1.144
-  labels:
-    module: icmp
-    service: ping
-    host: server-b
-    owner: '<owner>'
-    contact: '<contact-person> (<contact-address>)'
-    dependencies: '<dependencies>'
-```
-
-If ping always fails while the host is up, the host or a firewall drops ICMP. **Don't add an ICMP target for that host**: it would fire permanently and, through the inhibit rule, mute that host's HTTP alerts. Use `tcp_connect` instead.
 
 ### TCP port (`tcp_connect`)
 
@@ -167,23 +163,13 @@ To require exactly HTTP 200, or to make sure plain HTTP is never accepted, add a
     dependencies: '<dependencies>'
 ```
 
-If the body does not match, `probe_success` is 0 while `probe_http_status_code` is still 200, and `ServiceDown` fires after 2 minutes (tested, firing and resolved emails). That is the difference between "answers" and "works". For another application, copy the module in `blackbox/blackbox.yml`, give it its own name and change the regular expression to what a healthy response contains. Look at the real response first (`curl -s <url>`). `ServiceSlow` only watches `module="http_2xx"`, so a new module is not checked for slowness unless you change that alert.
+If the body does not match, `probe_success` is 0 while `probe_http_status_code` is still 200, and `ServiceDown` fires after 2 minutes (tested, firing and resolved emails). That is the difference between "answers" and "works". For another application, copy the module in `blackbox/blackbox.yml`, give it its own name and change the regular expression to what a healthy response contains. Look at the real response first (`curl -s <url>`). `ServiceSlow` watches every module whose name starts with `http_`, so a new HTTP module is checked for slowness automatically.
 
-## Combining ICMP and HTTP for one host
+## Several checks for one machine
 
-Probe the host with ICMP and the service with HTTP, and give both blocks **exactly the same `host` value**:
+Give every target of the same machine **exactly the same `host` value**, for example a web check and an SSH check:
 
 ```yaml
-- targets:
-    - 192.168.1.150
-  labels:
-    module: icmp
-    service: ping
-    host: server-a
-    owner: '<owner>'
-    contact: '<contact-person> (<contact-address>)'
-    dependencies: '<dependencies>'
-
 - targets:
     - http://192.168.1.150:8080/
   labels:
@@ -193,14 +179,19 @@ Probe the host with ICMP and the service with HTTP, and give both blocks **exact
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
     dependencies: '<dependencies>'
+
+- targets:
+    - 192.168.1.150:22
+  labels:
+    module: tcp_connect
+    service: ssh
+    host: server-a
+    owner: '<owner>'
+    contact: '<contact-person> (<contact-address>)'
+    dependencies: '<dependencies>'
 ```
 
-Why this matters:
-
-- **Diagnosis**: for a host that normally answers ping, ICMP down and HTTP down means the host or network is gone. ICMP up and HTTP down means the service failed on a running host.
-- **Inhibition**: Alertmanager has an inhibit rule. While `ServiceDown` for the `icmp` probe is firing, it suppresses `ServiceDown` for `http_2xx` probes **with an equal `host` label**. You get one email that says "the host is down" instead of one per service. If the `host` values differ (for example `server-a` and `wiki-server`), the rule does not match and you get both emails.
-  **Only combine them for hosts that reliably answer ping.** If ICMP is blocked, the ICMP alert fires permanently and mutes every HTTP outage on that host. Check that `probe_success{module="icmp"}` is `1` before you rely on it.
-- **Grouping**: emails are grouped by `alertname` and `host`, so all `ServiceDown` alerts of one host land in the same email.
+Emails are grouped by `alertname` and `host`, so when the machine goes down, all its `ServiceDown` alerts arrive in one email. A silence for maintenance also matches on `host`, and `DriveNotReadable` joins the node and smartctl exporters by it, so use the same value in the `node` and `smartctl` jobs of `prometheus.yml`. A typo splits the alerts over several emails and makes a silence miss some of them. It causes no error.
 
 ## After saving
 

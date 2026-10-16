@@ -7,11 +7,6 @@ modules:
     prober: tcp
     timeout: 5s
 
-  icmp:
-    prober: icmp
-    timeout: 5s
-
-
   # HTTPS with a certificate Blackbox cannot verify (self-signed, internal CA).
   # The probe still succeeds; probe_ssl_earliest_cert_expiry reports the expiry date.
   http_2xx_insecure:

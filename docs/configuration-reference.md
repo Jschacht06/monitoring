@@ -205,10 +205,6 @@ modules:
     prober: tcp
     timeout: 5s
 
-  icmp:
-    prober: icmp
-    timeout: 5s
-
   http_2xx_insecure:
     prober: http
     timeout: 5s
@@ -231,7 +227,6 @@ A **module** is a named probe recipe. Targets choose one with their `module` lab
 |---|---|---|---|
 | `http_2xx` | `http` | The URL returns a 2xx status (redirects are followed) within 5 s. For `https://` URLs, the TLS certificate must also be valid. | Websites, APIs, health endpoints |
 | `tcp_connect` | `tcp` | A TCP connection to `host:port` opens within 5 s | SSH, databases, any non-HTTP port |
-| `icmp` | `icmp` | The host answers ping within 5 s | Is the host/network reachable at all |
 | `http_2xx_insecure` | `http` | Like `http_2xx`, but the TLS certificate is **not verified** | HTTPS with a self-signed or internal certificate (Proxmox web UI). It still exports the certificate expiry. |
 | `http_grafana_health` | `http` | HTTP 200 **and** the body matches `"database": "ok"` | Application check: example for Grafana's `/api/health`. Copy it for other apps. |
 
@@ -318,21 +313,21 @@ expr: probe_success == 0
 for: 2m
 ```
 
-- **Detects:** a Blackbox probe that fails: no answer, a wrong status code, a connection refused, ping lost or more than 5 s.
+- **Detects:** a Blackbox probe that fails: no answer, a wrong status code, a connection refused or more than 5 s.
 - **In plain language:** "any probe that is currently failing".
 - **Why 2m:** about four failed probes in a row (30 s interval). One lost packet does not page anyone.
-- **What to change:** `for:` for faster or calmer alerting. To exclude a module, for example `probe_success{module!="icmp"} == 0`.
+- **What to change:** `for:` for faster or calmer alerting. To exclude a module, for example `probe_success{module!="tcp_connect"} == 0`.
 
 ### ServiceSlow
 
 ```yaml
-expr: probe_duration_seconds{module="http_2xx"} > 1 and on(instance, module) probe_success == 1
+expr: probe_duration_seconds{module=~"http_.*"} > 1 and on(instance, module) probe_success == 1
 for: 5m
 ```
 
 - **Detects:** an HTTP service that works but responds slowly.
 - **In plain language:** "HTTP probes that took longer than 1 second **and** succeeded". `and on(instance, module)` pairs each duration with the success value of the same probe. Failed probes are dropped, so `ServiceSlow` and `ServiceDown` never fire for the same probe. The duration is on the left side on purpose: `$value` in the description is then the measured time and not `1`.
-- **Why only `http_2xx`:** ICMP and TCP connect times are not a useful latency signal for users.
+- **Why only the `http_*` modules:** TCP connect times are not a useful latency signal for users. Every HTTP-based module is checked, including `http_2xx_insecure` and `http_grafana_health`.
 - **Why 5m:** short slowdowns are normal. Only sustained slowness is worth a warning.
 - **What to change:** the `1` (seconds) is a placeholder. The real threshold should come from the agreed service level (SLI) of each service. If different services need different thresholds, copy the rule and filter by label, for example `{module="http_2xx", service="wiki"}`.
 
@@ -379,7 +374,7 @@ for: 2m
 - **Detects:** Prometheus cannot scrape node_exporter, smartctl_exporter, pve-exporter or the Blackbox Exporter. The monitoring is blind: probe and disk metrics stop, so `ServiceDown` and `DiskSpaceLow` **cannot** fire.
 - **In plain language:** "a scrape of the `node`, `blackbox`, `smartctl` or `pve` job failed". For `blackbox`, there is one `up` series per target. If the Blackbox container dies, it fires for every target.
 - **Note:** `up{job="blackbox"} == 1` while the website is down is normal. See [up vs probe_success](adding-targets.md#up-vs-probe_success).
-- **What to change:** add more jobs to the regex when you add exporters (for example `node|blackbox|smartctl|pve|loki`). For a remote node_exporter host, a powered-off host also triggers this alert. You can suppress that with an inhibit rule, see [how-to-guides.md](how-to-guides.md#add-or-change-an-inhibit-rule).
+- **What to change:** add more jobs to the regex when you add exporters (for example `node|blackbox|smartctl|pve|loki`). For a remote node_exporter host, a powered-off host also triggers this alert.
 
 ### Drives
 
@@ -623,28 +618,17 @@ receivers:
 
 ### `inhibit_rules`
 
-```yaml
-inhibit_rules:
-  - source_matchers:
-      - alertname="ServiceDown"
-      - module="icmp"
-    target_matchers:
-      - alertname="ServiceDown"
-      - module="http_2xx"
-    equal: [host]
-```
+There are no inhibit rules by default. Grouping by `alertname` and `host` already puts all `ServiceDown` alerts of one machine into one email.
 
 **Inhibition** mutes some alerts while another alert is firing. Muted alerts still show in Prometheus and in the Alertmanager UI (as inhibited), but no email is sent for them.
 
 | Key | Meaning |
 |---|---|
-| `source_matchers` | The alert that does the muting: a failing ICMP probe. |
-| `target_matchers` | The alerts that get muted: failing HTTP probes. |
-| `equal` | Source and target must have the **same value** for these labels. `[host]` means that a ping failure on host A only mutes HTTP alerts of host A. |
+| `source_matchers` | The alert that does the muting. |
+| `target_matchers` | The alerts that get muted. |
+| `equal` | Source and target must have the **same value** for these labels. |
 
-Why: for a host that normally answers ping, a failing ping means the host or the network path is gone, so its web services are unreachable too. One email about the host is then more useful than one per service. This only works if the ICMP and HTTP targets have an identical `host` label. See [adding-targets.md](adding-targets.md#combining-icmp-and-http-for-one-host).
-
-> **Only add an ICMP target for hosts that reliably answer ping.** If a host or firewall blocks ICMP, the ICMP alert fires permanently and this rule mutes every HTTP outage on that host, without any warning. Before you add the ICMP target, check that `probe_success{module="icmp"}` is `1`.
+To add a rule, see [how-to-guides.md](how-to-guides.md#add-or-change-an-inhibit-rule).
 
 ---
 

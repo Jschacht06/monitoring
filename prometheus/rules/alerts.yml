@@ -10,10 +10,10 @@ groups:
         annotations:
           summary: "{{ $labels.service }} on {{ $labels.host }} is unreachable"
           description: "Probe {{ $labels.module }} to {{ $labels.instance }} has failed for more than 2 minutes (owner: {{ $labels.owner }})."
-          runbook: "ServiceDown: 1) check the host is up, 2) check the service process is running, 3) check the network path from noc-core, 4) contact the owner."
+          runbook: "ServiceDown: 1) check the service process and the host (Proxmox status for guests), 2) check the network path from noc-core, 3) a probe that fails at once means the port is closed (service stopped), one that fails after 5 s means the host or network is unreachable, 4) contact the owner."
 
       - alert: ServiceSlow
-        expr: probe_duration_seconds{module="http_2xx"} > 1 and on(instance, module) probe_success == 1
+        expr: probe_duration_seconds{module=~"http_.*"} > 1 and on(instance, module) probe_success == 1
         for: 5m
         labels:
           severity: warning

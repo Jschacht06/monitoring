@@ -30,7 +30,7 @@ Status of the recipes on this setup:
 | Change an alert threshold or "for" duration | Tested (test values for `ServiceSlow` and `DiskSpaceLow`) |
 | Add a new alert rule | Structure tested through the existing rules; the certificate example is **untested** |
 | Change routing and timings per severity | Routing by severity tested; the two examples (1 m warning wait, `info` route) are **untested** |
-| Add or change an inhibit rule | ICMP suppresses HTTP: tested. The `MonitoringCheckFailed` rule is **untested** |
+| Add or change an inhibit rule | No rules by default; the example is **untested** |
 | Silence alerts for maintenance | Tested |
 | Add or change the escalation | Tested, including the resolved email |
 | Add another email receiver or change the recipients | A second recipient is tested; the per-owner route is **untested** |
@@ -188,64 +188,32 @@ docker compose exec alertmanager amtool --alertmanager.url=http://localhost:9093
 
 **Inhibition** mutes alerts (the *targets*) while another alert (the *source*) is firing, if both have the same value for the labels in `equal`. Muted alerts still show in Prometheus and in Alertmanager (marked as inhibited), but no email goes out for them. Use it to report a **cause** once instead of all its **symptoms**.
 
-### Existing rule: ICMP down suppresses HTTP down
+> **Untested.** No inhibit rules are configured by default, so nothing here has been tried on this setup yet. Grouping by `alertname` and `host` already puts all alerts of the same kind for one machine into one email. Add a rule only for a cause and a symptom that really arrive as separate emails.
+
+### Template
+
+```yaml
+inhibit_rules:
+  - source_matchers:          # the alert that does the muting
+      - alertname="<CauseAlert>"
+    target_matchers:          # the alerts that get muted
+      - alertname="<SymptomAlert>"
+    equal: [host]             # labels that must have the same value on both
+```
+
+Every label in `equal` must exist on both alerts with exactly the same spelling. If one alert lacks the label, the rule never matches and you get both emails, without an error.
+
+### Example: a critical temperature alert mutes its warning
+
+Above 95 °C, `HostTemperatureHigh` (above 90 °C) and `HostTemperatureCritical` both fire for the same sensor. Report the critical one only:
 
 ```yaml
 inhibit_rules:
   - source_matchers:
-      - alertname="ServiceDown"
-      - module="icmp"
+      - alertname="HostTemperatureCritical"
     target_matchers:
-      - alertname="ServiceDown"
-      - module="http_2xx"
-    equal: [host]
-```
-
-For a host that normally answers ping, a failing ping means the host or the network path is gone, so its websites are unreachable too. You get one email about ping instead of one per website.
-
-> **Only use this for hosts that reliably answer ping.** If ICMP is blocked, the ICMP alert fires permanently and mutes every HTTP outage on that host. Use `tcp_connect` instead of `icmp` for such hosts. The same applies to the rule below.
-
-### New rule: a down host suppresses MonitoringCheckFailed
-
-> **Untested.** Not tried yet, because only noc-core has a `node` target at the moment. The outputs below are what the config should produce.
-
-When a remote host with node_exporter is powered off, two alerts fire: `ServiceDown` for its ICMP probe, and `MonitoringCheckFailed` because the `node` job can't scrape it. The second is a symptom. Add this entry to the `inhibit_rules:` list:
-
-```yaml
-  - source_matchers:
-      - alertname="ServiceDown"
-      - module="icmp"
-    target_matchers:
-      - alertname="MonitoringCheckFailed"
-    equal: [host]
-```
-
-This only works if the `host` label is **identical** in both places:
-
-- the ICMP target in `prometheus/targets/*.yml` (`host: server-a`)
-- the node_exporter target in the `node` job of `prometheus.yml` (`host: server-a`)
-
-A different spelling (`server-a` and `192.168.1.150`) means no match. You get both emails and no error.
-
-This rule does not hide a broken Blackbox Exporter. If Blackbox dies, there are no probe results, so `ServiceDown` cannot fire as a source, and `MonitoringCheckFailed` still reaches you.
-
-The full section then looks like this:
-
-```yaml
-inhibit_rules:
-  - source_matchers:
-      - alertname="ServiceDown"
-      - module="icmp"
-    target_matchers:
-      - alertname="ServiceDown"
-      - module="http_2xx"
-    equal: [host]
-  - source_matchers:
-      - alertname="ServiceDown"
-      - module="icmp"
-    target_matchers:
-      - alertname="MonitoringCheckFailed"
-    equal: [host]
+      - alertname="HostTemperatureHigh"
+    equal: [host, chip, sensor]
 ```
 
 **Apply:**
@@ -255,22 +223,22 @@ docker compose exec alertmanager amtool check-config /etc/alertmanager/alertmana
 docker compose restart alertmanager
 ```
 
-`check-config` should now report `2 inhibit rules`.
+`check-config` should now report `1 inhibit rules`.
 
-**Verify with fake alerts.** No host has to go down:
+**Verify with fake alerts.** No sensor has to get hot:
 
 ```bash
 docker compose exec alertmanager amtool --alertmanager.url=http://localhost:9093 \
-  alert add alertname=ServiceDown module=icmp host=inhibit-test severity=critical
+  alert add alertname=HostTemperatureCritical host=inhibit-test chip=test sensor=test severity=critical
 docker compose exec alertmanager amtool --alertmanager.url=http://localhost:9093 \
-  alert add alertname=MonitoringCheckFailed job=node host=inhibit-test severity=critical
+  alert add alertname=HostTemperatureHigh host=inhibit-test chip=test sensor=test severity=warning
 docker compose exec alertmanager amtool --alertmanager.url=http://localhost:9093 \
   alert query host=inhibit-test
 docker compose exec alertmanager amtool --alertmanager.url=http://localhost:9093 \
   alert query --inhibited host=inhibit-test
 ```
 
-Without a state flag, `alert query` shows only active alerts. The first query should show only `ServiceDown`. The second (`--inhibited`) shows only inhibited alerts and should list `MonitoringCheckFailed`. You should get one `[CRITICAL]` email for `ServiceDown` only. Both fake alerts expire on their own after about 5 minutes (`resolve_timeout`).
+Without a state flag, `alert query` shows only active alerts. The first query should show only `HostTemperatureCritical`. The second (`--inhibited`) shows only inhibited alerts and should list `HostTemperatureHigh`. You should get one `[CRITICAL]` email and no `[WARNING]` email. Both fake alerts expire on their own after about 5 minutes (`resolve_timeout`).
 
 ---
 
@@ -531,7 +499,7 @@ ufw status numbered
 
 The `allow` rule must come before the `deny` (ufw evaluates rules in order).
 
-On a Proxmox host, use **Datacenter → Firewall** instead: add accept rules for noc-core (tcp 9100), the web UI (tcp 8006), SSH (tcp 22) and ICMP from noc-core if you ping the host. Do this **before** setting *Input Policy* to `DROP` and *Firewall* to `Yes`, and keep console access ready: a missing rule locks you out of the web UI. `pve-firewall stop` on the console switches it off again.
+On a Proxmox host, use **Datacenter → Firewall** instead: add accept rules for noc-core (tcp 9100), the web UI (tcp 8006) and SSH (tcp 22). Do this **before** setting *Input Policy* to `DROP` and *Firewall* to `Yes`, and keep console access ready: a missing rule locks you out of the web UI. `pve-firewall stop` on the console switches it off again.
 
 **Check from noc-core** (it should work):
 
@@ -564,7 +532,7 @@ In `prometheus/prometheus.yml`, add a second entry under `static_configs` of the
           dependencies: '<dependencies>'
 ```
 
-Use **exactly the same `host` value** as this host's targets in `prometheus/targets/*.yml`. Grouping and the inhibit rules depend on it. Choose a readable machine name (for example `server-a`), not the IP address: the address is already in the `instance` label.
+Use **exactly the same `host` value** as this host's targets in `prometheus/targets/*.yml`. Grouping and silences depend on it. Choose a readable machine name (for example `server-a`), not the IP address: the address is already in the `instance` label.
 
 ### 4. Apply and verify
 
