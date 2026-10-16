@@ -10,3 +10,7 @@ compose.yaml
 
 /pve/*
 !/pve/template.yml
+
+
+// backup files
+*.bak*

@@ -10,3 +10,22 @@ modules:
   icmp:
     prober: icmp
     timeout: 5s
+
+
+  # HTTPS with a certificate Blackbox cannot verify (self-signed, internal CA).
+  # The probe still succeeds; probe_ssl_earliest_cert_expiry reports the expiry date.
+  http_2xx_insecure:
+    prober: http
+    timeout: 5s
+    http:
+      tls_config:
+        insecure_skip_verify: true
+
+#custom module for Grafana health check
+  http_grafana_health:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - '"database":\s*"ok"'

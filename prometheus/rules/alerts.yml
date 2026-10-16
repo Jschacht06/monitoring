@@ -176,3 +176,28 @@ groups:
           summary: "Guest {{ $labels.name }} ({{ $labels.id }}) on {{ $labels.host }} is not running"
           description: "{{ $labels.name }} ({{ $labels.id }}) has the 'monitored-warning' tag in Proxmox but is stopped. If it was stopped on purpose, remove the tag in Proxmox."
           runbook: "PveGuestNotRunning: 1) open the guest in the Proxmox web UI, 2) start it and read the task log if it will not start, 3) if the stop was intended, remove the 'monitored-warning' tag."
+
+
+
+# certificate checks
+  - name: certificates
+    rules:
+      - alert: CertificateExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) < 14 * 86400 and (probe_ssl_earliest_cert_expiry - time()) >= 3 * 86400 and probe_ssl_earliest_cert_expiry > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certificate of {{ $labels.service }} on {{ $labels.host }} expires in {{ $value | humanizeDuration }}"
+          description: "The TLS certificate that {{ $labels.instance }} presents expires in {{ $value | humanizeDuration }}. A normal renewal should have happened by now."
+          runbook: "CertificateExpiringSoon: 1) check why the renewal failed (certbot or proxy logs, Proxmox node certificate), 2) renew it, 3) check the new expiry in Prometheus with probe_ssl_earliest_cert_expiry, 4) contact the owning group."
+
+      - alert: CertificateExpiryCritical
+        expr: (probe_ssl_earliest_cert_expiry - time()) < 3 * 86400 and probe_ssl_earliest_cert_expiry > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Certificate of {{ $labels.service }} on {{ $labels.host }} expires in {{ $value | humanizeDuration }} (or has expired)"
+          description: "The TLS certificate that {{ $labels.instance }} presents expires in {{ $value | humanizeDuration }}. Browsers and clients will reject it soon, or already do."
+          runbook: "CertificateExpiryCritical: 1) renew or replace the certificate now, 2) check that the service presents the new one, 3) contact the owning group."
