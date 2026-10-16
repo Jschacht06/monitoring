@@ -8,7 +8,7 @@ Targets are **not** listed in `prometheus.yml`. They live in `prometheus/targets
 
 All files that match `prometheus/targets/*.yml` are loaded. You can use:
 
-- **one file per group** (for example `group-a.yml`, `noc.yml`). This is recommended, because it matches the `group` label and keeps ownership clear.
+- **one file per owner** (for example `team-a.yml`, `noc.yml`). This is recommended, because it matches the `owner` label and keeps ownership clear.
 - **one file per target**, which can be handy in a small homelab.
 - one big file with everything.
 
@@ -16,8 +16,8 @@ For a new target file, start from the template:
 
 ```bash
 cd /opt/monitoring
-cp prometheus/targets/template.yml prometheus/targets/group-a.yml
-nano prometheus/targets/group-a.yml
+cp prometheus/targets/template.yml prometheus/targets/team-a.yml
+nano prometheus/targets/team-a.yml
 ```
 
 Only copy the template when creating a new file. For existing targets, edit their current file; updating `template.yml` does not change files you copied earlier.
@@ -35,9 +35,8 @@ Each file is a YAML list of **blocks**. One block holds one or more targets that
     - http://192.168.1.150:8080/health
   labels:
     module: http_2xx
-    group: group-a
     service: wiki
-    host: 192.168.1.150
+    host: server-a
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
     dependencies: '<dependencies>'
@@ -47,21 +46,20 @@ Each file is a YAML list of **blocks**. One block holds one or more targets that
 |---|---|---|---|
 | `targets` | yes | What to probe. The format depends on the module: a full URL for `http_2xx`, `host:port` for `tcp_connect`, a bare host or IP for `icmp`. | Becomes the `instance` label (see the relabeling in [configuration-reference.md](configuration-reference.md#job-blackbox)). Shown in alert descriptions ("Probe ... to `<instance>`"). |
 | `module` | yes | Which Blackbox module runs the probe. Must exist in `blackbox/blackbox.yml`: `http_2xx`, `http_2xx_insecure`, `http_grafana_health`, `tcp_connect` or `icmp`. | Passed to Blackbox as `?module=`. `ServiceSlow` only looks at `module="http_2xx"`. The inhibit rule uses it (`icmp` suppresses `http_2xx`). |
-| `group` | yes (catalogue) | The owning group or team. | Shown in alert descriptions, so the receiver knows whom to contact. Useful for filtering in Grafana and silences. Not used for routing at the moment. |
 | `service` | yes (catalogue) | Human-readable service name, such as `wiki`, `ssh` or `ping`. | Alert summary: "`<service>` on `<host>` is unreachable". |
-| `host` | yes (catalogue) | The machine the service runs on. Use the **same value for every target on the same machine**. | Alertmanager groups emails by `alertname` and `host`. The inhibit rule matches on `host`. The email subject shows it. |
-| `owner` | yes (catalogue) | Person or team responsible for the service. | Owner column in the service catalogue. |
+| `host` | yes (catalogue) | The machine, node or PC the service runs on, as a readable name (`pve1`, `server-a`), not an IP address. Use the **same value for every target on the same machine**, including its exporters in `prometheus.yml`. | Alertmanager groups emails by `alertname` and `host`. The inhibit rule matches on `host`. The email subject shows it. |
+| `owner` | yes (catalogue) | Person or team responsible for the service. | Owner column in the service catalogue. Shown in `ServiceDown` and `ServiceSlow` alert descriptions, so the receiver knows whom to contact. Can be used for filtering in Grafana and for routes ([example](how-to-guides.md#add-a-receiver-for-one-owner)). |
 | `contact` | yes (catalogue) | Named contact person and an agreed contact channel, for example a school email address. | Contact person column in the service catalogue. |
 | `dependencies` | yes (catalogue) | Services or infrastructure this service needs. | Dependencies column in the service catalogue. |
-| `instance` | do not set | Set automatically to the target address by relabeling. | Identifies the individual probe in alerts, `up` and `probe_success`. |
+| `instance` | do not set | Set automatically by relabeling: the probed address for probes (URL, `host:port` or IP), the scrape address for exporters. | Identifies the individual probe in alerts, `up` and `probe_success`. |
 
-Replace `<owner>`, `<contact-person>`, `<contact-address>` and `<dependencies>` in every example before saving. The six catalogue labels (`group`, `service`, `host`, `owner`, `contact`, `dependencies`) are required by this project's dashboard; Prometheus itself can scrape a target without them.
+Replace `<owner>`, `<contact-person>`, `<contact-address>` and `<dependencies>` in every example before saving. The five catalogue labels (`service`, `host`, `owner`, `contact`, `dependencies`) are required by this project's dashboards; Prometheus itself can scrape a target without them.
 
-Use consistent lowercase IDs for `group`, `service` and `host`, with dashes where appropriate (for example `group-a`). Owner and contact values can contain names, spaces and punctuation; quote these values as shown. A typo in `host` breaks grouping and inhibition without any error.
+Use consistent lowercase IDs for `service` and `host`, with dashes where appropriate (for example `server-a`). `owner` and `contact` values can contain names, spaces and punctuation; quote these values as shown. A typo in `host` breaks grouping and inhibition without any error.
 
-Write monitored dependencies as `group/service@host`, and unmonitored infrastructure as `external:<name>`. Separate several entries with `; `, for example `external:docker; noc/prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record. Keep the dependency list as one quoted string, not a YAML list.
+Write monitored dependencies as `service@host`, and unmonitored infrastructure as `external:<name>`. Separate several entries with `; `, for example `external:docker; prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record. Keep the dependency list as one quoted string, not a YAML list.
 
-Checks for the same service instance must share all six catalogue labels so they become one row. These labels document ownership and dependencies; they do not automatically change alert routing or inhibition. See [service-catalogue.md](../grafana/docs/service-catalogue.md#2-add-the-first-targets-and-their-catalogue-labels) for the catalogue setup.
+Checks for the same service on the same machine must share `service`, `host`, `owner`, `contact` and `dependencies` so they become one row. The health dashboard shows each check as `service · host · module`, so two checks with the same service, host and module look identical there: give them different `service` values. These labels document ownership and dependencies; they do not automatically change alert routing or inhibition. See [service-catalogue.md](../grafana/docs/service-catalogue.md#2-add-the-first-targets-and-their-catalogue-labels) for the catalogue setup.
 
 ## Examples
 
@@ -74,9 +72,8 @@ Passes when the URL answers with a 2xx status within 5 s. Redirects are followed
     - http://192.168.1.150:8080/
   labels:
     module: http_2xx
-    group: group-a
     service: wiki
-    host: 192.168.1.150
+    host: server-a
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
     dependencies: '<dependencies>'
@@ -93,9 +90,8 @@ Passes when the host answers ping. The target is a bare IP or hostname, without 
     - 192.168.1.144
   labels:
     module: icmp
-    group: group-a
     service: ping
-    host: 192.168.1.144
+    host: server-b
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
     dependencies: '<dependencies>'
@@ -112,9 +108,8 @@ Passes when a TCP connection to `host:port` can be opened. Use it for services w
     - 192.168.1.144:22
   labels:
     module: tcp_connect
-    group: group-a
     service: ssh
-    host: 192.168.1.144
+    host: server-b
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
     dependencies: '<dependencies>'
@@ -131,7 +126,6 @@ Use the same `http_2xx` module with an `https://` URL. The HTTP prober checks th
     - https://wiki.example.org/
   labels:
     module: http_2xx
-    group: group-a
     service: wiki-https
     host: wiki.example.org
     owner: '<owner>'
@@ -146,9 +140,8 @@ Use the same `http_2xx` module with an `https://` URL. The HTTP prober checks th
     - https://192.168.1.2:8006
   labels:
     module: http_2xx_insecure
-    group: group-a
     service: proxmox-web
-    host: 192.168.1.2
+    host: pve1
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
     dependencies: '<dependencies>'
@@ -167,7 +160,6 @@ To require exactly HTTP 200, or to make sure plain HTTP is never accepted, add a
     - http://grafana:3000/api/health
   labels:
     module: http_grafana_health
-    group: noc
     service: grafana-health
     host: noc-core
     owner: '<owner>'
@@ -186,9 +178,8 @@ Probe the host with ICMP and the service with HTTP, and give both blocks **exact
     - 192.168.1.150
   labels:
     module: icmp
-    group: group-a
     service: ping
-    host: 192.168.1.150
+    host: server-a
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
     dependencies: '<dependencies>'
@@ -197,9 +188,8 @@ Probe the host with ICMP and the service with HTTP, and give both blocks **exact
     - http://192.168.1.150:8080/
   labels:
     module: http_2xx
-    group: group-a
     service: wiki
-    host: 192.168.1.150
+    host: server-a
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
     dependencies: '<dependencies>'
@@ -208,7 +198,7 @@ Probe the host with ICMP and the service with HTTP, and give both blocks **exact
 Why this matters:
 
 - **Diagnosis**: for a host that normally answers ping, ICMP down and HTTP down means the host or network is gone. ICMP up and HTTP down means the service failed on a running host.
-- **Inhibition**: Alertmanager has an inhibit rule. While `ServiceDown` for the `icmp` probe is firing, it suppresses `ServiceDown` for `http_2xx` probes **with an equal `host` label**. You get one email that says "the host is down" instead of one per service. If the `host` values differ (for example `192.168.1.150` and `wiki-server`), the rule does not match and you get both emails.
+- **Inhibition**: Alertmanager has an inhibit rule. While `ServiceDown` for the `icmp` probe is firing, it suppresses `ServiceDown` for `http_2xx` probes **with an equal `host` label**. You get one email that says "the host is down" instead of one per service. If the `host` values differ (for example `server-a` and `wiki-server`), the rule does not match and you get both emails.
   **Only combine them for hosts that reliably answer ping.** If ICMP is blocked, the ICMP alert fires permanently and mutes every HTTP outage on that host. Check that `probe_success{module="icmp"}` is `1` before you rely on it.
 - **Grouping**: emails are grouped by `alertname` and `host`, so all `ServiceDown` alerts of one host land in the same email.
 
@@ -218,12 +208,12 @@ Prometheus automatically discovers target-file changes; a restart is unnecessary
 
 ### 1. Check the file inside the running container
 
-All commands below run inside the LXC. The examples use `group-a.yml`; replace that filename with the file containing your two targets.
+All commands below run inside the LXC. The examples use `team-a.yml`; replace that filename with the file containing your two targets.
 
 ```bash
 cd /opt/monitoring
-cat prometheus/targets/group-a.yml
-docker compose exec prometheus cat /etc/prometheus/targets/group-a.yml
+cat prometheus/targets/team-a.yml
+docker compose exec prometheus cat /etc/prometheus/targets/team-a.yml
 ```
 
 Why both copies: the first is the file you edited; the second is what the running Prometheus container can read through its mount.
@@ -304,10 +294,10 @@ Once the current Prometheus result contains the labels:
 
 **Check:** the catalogue displays the new owner, contact and dependency values. Target-label changes are read through Prometheus; no Grafana restart or dashboard re-import is needed.
 
-If Explore has the labels but the catalogue columns are missing, edit **Every monitored service**. Its query must include all six labels:
+If Explore has the labels but the catalogue columns are missing, edit **Every monitored service**. Its query must include all five labels:
 
 ```promql
-count by (group, service, host, owner, contact, dependencies) (up)
+count by (service, host, owner, contact, dependencies) (up)
 ```
 
 Use **Instant**, **Table** format and a Table visualisation. In **Organize fields by name**, make `owner`, `contact` and `dependencies` visible and name them **Owner**, **Contact person** and **Dependencies**. Save any panel changes. The [dashboard guide](../grafana/docs/service-catalogue-dashboard.md#4-create-the-dashboard-manually-in-grafana-alternative) explains the full panel settings.

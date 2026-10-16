@@ -66,9 +66,15 @@ Check: `http://<noc-core-ip>:9090/api/v1/alertmanagers` should list it under `ac
     static_configs:
       - targets:
           - localhost:9090
+        labels:
+          host: noc-core
+          service: prometheus
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: 'external:docker'
 ```
 
-Prometheus scrapes its own metrics. This gives you `up{job="prometheus"}` and internal metrics such as TSDB size. It has no `host` label and is not part of `MonitoringCheckFailed`. If Prometheus is down, nothing can alert on that anyway.
+Prometheus scrapes its own metrics. This gives you `up{job="prometheus"}` and internal metrics such as TSDB size. It carries the same catalogue labels as the other jobs, so Prometheus appears in the service catalogue, but it is not part of `MonitoringCheckFailed`. If Prometheus is down, nothing can alert on that anyway.
 
 #### Job `node`
 
@@ -78,10 +84,13 @@ Prometheus scrapes its own metrics. This gives you `up{job="prometheus"}` and in
       - targets: ['node-exporter:9100']
         labels:
           host: noc-core
-          group: noc
+          service: node-exporter
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: 'external:docker'
 ```
 
-Scrapes node_exporter on noc-core over the Docker network (no published port). The `host` and `group` labels are added to every metric of this target, so disk alerts carry the same labels as probe alerts (`host: noc-core`). That keeps grouping and inhibition working across both. To add more hosts, see [how-to-guides.md](how-to-guides.md#add-node_exporter-for-another-host).
+Scrapes node_exporter on noc-core over the Docker network (no published port). The catalogue labels (`host`, `service`, `owner`, `contact`, `dependencies`) are added to every metric of this target, so disk alerts carry the same `host` as probe alerts (`host: noc-core`). That keeps grouping and inhibition working across both. To add more hosts, see [how-to-guides.md](how-to-guides.md#add-node_exporter-for-another-host).
 
 ```yaml
     metric_relabel_configs:
@@ -99,8 +108,11 @@ noc-core is an LXC and shares the Proxmox host's kernel, so its node_exporter al
   #   static_configs:
   #     - targets: ['<host-ip>:9633']
   #       labels:
-  #         host: <host-ip>
-  #         group: noc
+  #         host: <host-name>
+  #         service: smartctl-exporter
+  #         owner: '<owner>'
+  #         contact: '<contact-person> (<contact-address>)'
+  #         dependencies: '<dependencies>'
 ```
 
 Scrapes smartctl_exporter on a physical host, for drive health and drive temperature. It is commented out in the template because it needs a host with real drives. Use the same `host` value as the `node` job for the same machine: `DriveNotReadable` compares both exporters by `host`. Setup: [how-to-guides.md](how-to-guides.md#add-smartctl_exporter-for-drive-health).
@@ -117,8 +129,11 @@ Scrapes smartctl_exporter on a physical host, for drive health and drive tempera
   #   static_configs:
   #     - targets: ['<proxmox-ip>']
   #       labels:
-  #         host: <proxmox-ip>
-  #         group: noc
+  #         host: <host-name>
+  #         service: pve-exporter
+  #         owner: '<owner>'
+  #         contact: '<contact-person> (<contact-address>)'
+  #         dependencies: '<dependencies>'
   #   relabel_configs:
   #     - source_labels: [__address__]
   #       target_label: __param_target
@@ -163,7 +178,7 @@ The Blackbox Exporter works differently from a normal exporter. Prometheus does 
 | `source_labels: [__param_target]` → `target_label: instance` | Set `instance` to the probed address. Without this, every probe would get `instance="blackbox:9115"` and you could not tell them apart. |
 | `target_label: __address__`, `replacement: blackbox:9115` | Replace the address Prometheus actually connects to with the Blackbox Exporter. The original target is now only in the parameter. |
 
-Labels without `__` (`module`, `group`, `service`, `host`) stay on every metric of that probe. Alerts and dashboards use them.
+Labels without `__` (`module`, `service`, `host`, `owner`, `contact`, `dependencies`) stay on every metric of that probe. Alerts and dashboards use them.
 
 ### Retention is not in this file
 
@@ -319,7 +334,7 @@ for: 5m
 - **In plain language:** "HTTP probes that took longer than 1 second **and** succeeded". `and on(instance, module)` pairs each duration with the success value of the same probe. Failed probes are dropped, so `ServiceSlow` and `ServiceDown` never fire for the same probe. The duration is on the left side on purpose: `$value` in the description is then the measured time and not `1`.
 - **Why only `http_2xx`:** ICMP and TCP connect times are not a useful latency signal for users.
 - **Why 5m:** short slowdowns are normal. Only sustained slowness is worth a warning.
-- **What to change:** the `1` (seconds) is a placeholder. The real threshold should come from each group's SLI. If different services need different thresholds, copy the rule and filter by label, for example `{module="http_2xx", group="group-a"}`.
+- **What to change:** the `1` (seconds) is a placeholder. The real threshold should come from the agreed service level (SLI) of each service. If different services need different thresholds, copy the rule and filter by label, for example `{module="http_2xx", service="wiki"}`.
 
 | Probe result | Meaning | Alert |
 |---|---|---|
@@ -456,10 +471,10 @@ expr: smartctl_device_temperature{temperature_type="current", device!~"nvme.*"} 
 Look at what the hardware really does and what it reports about itself before you pick a number:
 
 ```promql
-max_over_time(node_hwmon_temp_celsius{host="<host-ip>", chip=~"platform_coretemp_.*"}[24h])   # highest value in a day
-node_hwmon_temp_crit_celsius{host="<host-ip>"}   # critical limit reported by the chip
-node_hwmon_temp_max_celsius{host="<host-ip>"}    # "high" mark reported by the chip
-smartctl_device_temperature{host="<host-ip>"}    # drive temperatures
+max_over_time(node_hwmon_temp_celsius{host="<host-name>", chip=~"platform_coretemp_.*"}[24h])   # highest value in a day
+node_hwmon_temp_crit_celsius{host="<host-name>"}   # critical limit reported by the chip
+node_hwmon_temp_max_celsius{host="<host-name>"}    # "high" mark reported by the chip
+smartctl_device_temperature{host="<host-name>"}    # drive temperatures
 ```
 
 Set the warning above your normal peak and the critical alert a few degrees below the chip's critical limit. Ignore limits that look absurd (such as `65261.85`): they mean "not set".

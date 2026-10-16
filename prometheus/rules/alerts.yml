@@ -9,8 +9,8 @@ groups:
           severity: critical
         annotations:
           summary: "{{ $labels.service }} on {{ $labels.host }} is unreachable"
-          description: "Probe {{ $labels.module }} to {{ $labels.instance }} has failed for more than 2 minutes (group: {{ $labels.group }})."
-          runbook: "ServiceDown: 1) check the host is up, 2) check the service process is running, 3) check the network path from noc-core, 4) contact the owning group."
+          description: "Probe {{ $labels.module }} to {{ $labels.instance }} has failed for more than 2 minutes (owner: {{ $labels.owner }})."
+          runbook: "ServiceDown: 1) check the host is up, 2) check the service process is running, 3) check the network path from noc-core, 4) contact the owner."
 
       - alert: ServiceSlow
         expr: probe_duration_seconds{module="http_2xx"} > 1 and on(instance, module) probe_success == 1
@@ -19,8 +19,8 @@ groups:
           severity: warning
         annotations:
           summary: "{{ $labels.service }} on {{ $labels.host }} is slow"
-          description: "Probe {{ $labels.module }} to {{ $labels.instance }} succeeds but is slow: {{ $value | humanizeDuration }} (group: {{ $labels.group }})."
-          runbook: "ServiceSlow: 1) check load on the host and the service, 2) check the network path from noc-core, 3) compare with the trend in Grafana, 4) contact the owning group."
+          description: "Probe {{ $labels.module }} to {{ $labels.instance }} succeeds but is slow: {{ $value | humanizeDuration }} (owner: {{ $labels.owner }})."
+          runbook: "ServiceSlow: 1) check load on the host and the service, 2) check the network path from noc-core, 3) compare with the trend in Grafana, 4) contact the owner."
 #node exporter
   - name: capacity
     rules:
@@ -34,7 +34,7 @@ groups:
         annotations:
           summary: "Disk space low on {{ $labels.host }} ({{ $labels.mountpoint }})"
           description: "Only {{ $value | humanizePercentage }} free on {{ $labels.mountpoint }} ({{ $labels.device }})."
-          runbook: "DiskSpaceLow: 1) find what grew (du -xh / | sort -h | tail), 2) clean logs or old data, 3) extend the disk, 4) contact the owning group."
+          runbook: "DiskSpaceLow: 1) find what grew (du -xh / | sort -h | tail), 2) clean logs or old data, 3) extend the disk, 4) contact the owner."
 
       - alert: DiskWillFillSoon
         expr: |
@@ -45,7 +45,7 @@ groups:
         annotations:
           summary: "Disk on {{ $labels.host }} ({{ $labels.mountpoint }}) predicted full within 24h"
           description: "At the current growth rate {{ $labels.mountpoint }} on {{ $labels.host }} runs out of space within 24 hours."
-          runbook: "DiskWillFillSoon: 1) check recent growth, 2) clean or extend before it fills, 3) contact the owning group."
+          runbook: "DiskWillFillSoon: 1) check recent growth, 2) clean or extend before it fills, 3) contact the owner."
 #selfcheck
   - name: monitoring-health
     rules:
@@ -190,7 +190,7 @@ groups:
         annotations:
           summary: "Certificate of {{ $labels.service }} on {{ $labels.host }} expires in {{ $value | humanizeDuration }}"
           description: "The TLS certificate that {{ $labels.instance }} presents expires in {{ $value | humanizeDuration }}. A normal renewal should have happened by now."
-          runbook: "CertificateExpiringSoon: 1) check why the renewal failed (certbot or proxy logs, Proxmox node certificate), 2) renew it, 3) check the new expiry in Prometheus with probe_ssl_earliest_cert_expiry, 4) contact the owning group."
+          runbook: "CertificateExpiringSoon: 1) check why the renewal failed (certbot or proxy logs, Proxmox node certificate), 2) renew it, 3) check the new expiry in Prometheus with probe_ssl_earliest_cert_expiry, 4) contact the owner."
 
       - alert: CertificateExpiryCritical
         expr: (probe_ssl_earliest_cert_expiry - time()) < 3 * 86400 and probe_ssl_earliest_cert_expiry > 0
@@ -200,4 +200,4 @@ groups:
         annotations:
           summary: "Certificate of {{ $labels.service }} on {{ $labels.host }} expires in {{ $value | humanizeDuration }} (or has expired)"
           description: "The TLS certificate that {{ $labels.instance }} presents expires in {{ $value | humanizeDuration }}. Browsers and clients will reject it soon, or already do."
-          runbook: "CertificateExpiryCritical: 1) renew or replace the certificate now, 2) check that the service presents the new one, 3) contact the owning group."
+          runbook: "CertificateExpiryCritical: 1) renew or replace the certificate now, 2) check that the service presents the new one, 3) contact the owner."

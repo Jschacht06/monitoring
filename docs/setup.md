@@ -151,17 +151,30 @@ Probe targets are separate: Prometheus reads them from `prometheus/targets/*.yml
 
 ```bash
 cat > prometheus/targets/noc.yml <<'EOF'
-# One block per (module, host/service). Add targets to a block, or copy a block.
+# One block per check. Targets in a block share all labels.
 - targets:
     - http://prometheus:9090/-/healthy
+  labels:
+    module: http_2xx
+    service: prometheus-health
+    host: noc-core
+    owner: '<owner>'
+    contact: '<contact-person> (<contact-address>)'
+    dependencies: 'external:docker'
+
+- targets:
     - http://grafana:3000/api/health
   labels:
     module: http_2xx
-    group: noc
-    service: noc-selftest
+    service: grafana-web
     host: noc-core
+    owner: '<owner>'
+    contact: '<contact-person> (<contact-address>)'
+    dependencies: 'external:docker'
 EOF
 ```
+
+Open the file and replace `<owner>` and `<contact-person> (<contact-address>)` with the real values (`nano prometheus/targets/noc.yml`). The labels are explained in [adding-targets.md](adding-targets.md#the-fields).
 
 Real target files are ignored by Git, because they contain internal addresses. To add other services, see [adding-targets.md](adding-targets.md).
 

@@ -11,21 +11,36 @@ alerting:
 rule_files:
   - /etc/prometheus/rules/*.yml
 scrape_configs:
+  # Every job carries the same catalogue labels as the probe targets (docs/adding-targets.md):
+  # host = readable machine name, service, owner, contact, dependencies.
+  # Replace <owner> and <contact-person> (<contact-address>) before use.
   - job_name: prometheus
     static_configs:
       - targets:
           - localhost:9090
+        labels:
+          host: noc-core
+          service: prometheus
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: 'external:docker'
   - job_name: node
     static_configs:
       - targets: ['node-exporter:9100']
         labels:
           host: noc-core
-          group: noc
+          service: node-exporter
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: 'external:docker'
       # Add more hosts here, see docs/how-to-guides.md#add-node_exporter-for-another-host
       # - targets: ['<host-ip>:9100']
       #   labels:
-      #     host: <host-ip>
-      #     group: group-a
+      #     host: <host-name>
+      #     service: node-exporter
+      #     owner: '<owner>'
+      #     contact: '<contact-person> (<contact-address>)'
+      #     dependencies: '<dependencies>'
     # noc-core is an LXC: it shares the Proxmox kernel, so its node_exporter also reports the
     # host's ZFS pools and CPU/NVMe sensors. Drop them here so one problem is not reported twice
     # (as host=noc-core and as the real host). Remove this block if noc-core is not an LXC.
@@ -40,8 +55,11 @@ scrape_configs:
   #   static_configs:
   #     - targets: ['<host-ip>:9633']
   #       labels:
-  #         host: <host-ip>
-  #         group: noc
+  #         host: <host-name>
+  #         service: smartctl-exporter
+  #         owner: '<owner>'
+  #         contact: '<contact-person> (<contact-address>)'
+  #         dependencies: '<dependencies>'
 
   # Optional: pve-exporter (Proxmox API: status of every VM and LXC). Uncomment, fill in the
   # Proxmox IP and see docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter
@@ -54,8 +72,11 @@ scrape_configs:
   #   static_configs:
   #     - targets: ['<proxmox-ip>']
   #       labels:
-  #         host: <proxmox-ip>
-  #         group: noc
+  #         host: <host-name>
+  #         service: pve-exporter
+  #         owner: '<owner>'
+  #         contact: '<contact-person> (<contact-address>)'
+  #         dependencies: '<dependencies>'
   #   relabel_configs:
   #     - source_labels: [__address__]
   #       target_label: __param_target

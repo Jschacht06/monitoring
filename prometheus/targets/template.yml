@@ -1,10 +1,21 @@
 # Template for target files.
 #
-# Copy this file to a new name (e.g. group-a.yml), uncomment one block,
+# Copy this file to a new name (e.g. team-a.yml), uncomment one block,
 # and fill in the real values. Do NOT use this template.yml directly as a
 # live target list — its blocks are commented out on purpose.
 #
-# One block per (module, host/service). Add targets to a block, or copy a block.
+# One block per check. Targets in one block share all labels.
+#
+# Labels:
+#   module        probe type, see below
+#   service       the service, e.g. wiki (the health dashboard shows service, host and module,
+#                 so two checks with the same host and module need different services)
+#   host          readable name of the machine the service runs on (not its IP), the same for
+#                 every target on that machine
+#   owner         person or team responsible
+#   contact       how to reach the owner
+#   dependencies  what the service needs: service@host or external:<name>, separated by "; "
+#   (instance is set automatically to the probed address)
 #
 # Available modules are defined in blackbox/blackbox.yml:
 #   http_2xx, http_2xx_insecure, http_grafana_health, tcp_connect, icmp
@@ -13,14 +24,13 @@
 
 # HTTP(s) health check — expects a 2xx response.
 # - targets:
-#     - http://<host>:<port>/<path>
+#     - http://<address>:<port>/<path>
 #   labels:
 #     module: http_2xx
-#     group: <group-name>
 #     service: <service-name>
-#     host: <host-name-or-ip>
+#     host: <machine-name>
 #     owner: <owner>
-#     contact: <owner@exmaple.com>
+#     contact: <owner@example.com>
 #     dependencies: <dependencies>
 
 # Example for a host without a web interface (uncomment and fill in):
@@ -28,9 +38,8 @@
 #     - 192.168.1.144:22
 #   labels:
 #     module: tcp_connect
-#     group: group-a
 #     service: ssh
-#     host: 192.168.1.144
+#     host: server-b
 #     owner: John Doe
 #     contact: john.doe@gmail.com
 #     dependencies: network switch, firewall
@@ -39,9 +48,8 @@
 #     - 192.168.1.144
 #   labels:
 #     module: icmp
-#     group: group-a
 #     service: ping
-#     host: 192.168.1.144
+#     host: server-b
 #     owner: Mark Smith
 #     contact: mark.smith@outlook.com
 #     dependencies: network interface

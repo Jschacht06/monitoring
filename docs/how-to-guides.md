@@ -33,7 +33,7 @@ Status of the recipes on this setup:
 | Add or change an inhibit rule | ICMP suppresses HTTP: tested. The `MonitoringCheckFailed` rule is **untested** |
 | Silence alerts for maintenance | Tested |
 | Add or change the escalation | Tested, including the resolved email |
-| Add another email receiver or change the recipients | A second recipient is tested; the per-group route is **untested** |
+| Add another email receiver or change the recipients | A second recipient is tested; the per-owner route is **untested** |
 | Add node_exporter for another host | Debian package on the Proxmox host: tested. Docker on another host and the firewall steps: **untested** |
 | Add smartctl_exporter for drive health | Tested on the Proxmox host (Debian 13 package from backports) |
 | Monitor Proxmox guests with pve-exporter | Tested on the Proxmox host (read-only token, exporter, job UP, both tag alerts fired and resolved) |
@@ -95,8 +95,8 @@ Copy this template into `prometheus/rules/alerts.yml`, either into an existing g
           severity: warning              # critical or warning: decides the route
         annotations:
           summary: "<short text with {{ $labels.host }}>"
-          description: "<details, can use {{ $value }} and {{ $labels.group }}>"
-          runbook: "<AlertName>: 1) first check, 2) second check, 3) contact the owning group."
+          description: "<details, can use {{ $value }} and {{ $labels.owner }}>"
+          runbook: "<AlertName>: 1) first check, 2) second check, 3) contact the owner."
 ```
 
 **Example** (not in the repo yet, **untested**): warn when a TLS certificate expires within 14 days. It uses a metric that HTTPS probes already produce.
@@ -111,15 +111,15 @@ Copy this template into `prometheus/rules/alerts.yml`, either into an existing g
           severity: warning
         annotations:
           summary: "Certificate of {{ $labels.service }} on {{ $labels.host }} expires soon"
-          description: "The TLS certificate of {{ $labels.instance }} expires in {{ $value | humanize }} days (group: {{ $labels.group }})."
-          runbook: "CertificateExpiringSoon: 1) check the certificate renewal (e.g. certbot), 2) renew or replace the certificate, 3) contact the owning group."
+          description: "The TLS certificate of {{ $labels.instance }} expires in {{ $value | humanize }} days (owner: {{ $labels.owner }})."
+          runbook: "CertificateExpiringSoon: 1) check the certificate renewal (e.g. certbot), 2) renew or replace the certificate, 3) contact the owner."
 ```
 
 Rules of thumb:
 
 - Every alert needs a `severity` that matches a route (`critical` or `warning`). Otherwise it goes to the `default` receiver.
 - Every alert needs a runbook line, so the receiver knows what to do.
-- Keep `host` and `group` on the result. Avoid aggregations like `sum(...)` without `by (host, group)`, because they drop labels that grouping, inhibition and the email text rely on.
+- Keep `host` and `owner` on the result. Avoid aggregations like `sum(...)` without `by (host, owner)`, because they drop labels that grouping, inhibition and the email text rely on.
 - Try the expression in the Prometheus query box first. It should return nothing while everything is fine.
 
 **Apply and verify:**
@@ -222,10 +222,10 @@ When a remote host with node_exporter is powered off, two alerts fire: `ServiceD
 
 This only works if the `host` label is **identical** in both places:
 
-- the ICMP target in `prometheus/targets/*.yml` (`host: 192.168.1.150`)
-- the node_exporter target in the `node` job of `prometheus.yml` (`host: 192.168.1.150`)
+- the ICMP target in `prometheus/targets/*.yml` (`host: server-a`)
+- the node_exporter target in the `node` job of `prometheus.yml` (`host: server-a`)
 
-A different spelling (`192.168.1.150` and `server-a`) means no match. You get both emails and no error.
+A different spelling (`server-a` and `192.168.1.150`) means no match. You get both emails and no error.
 
 This rule does not hide a broken Blackbox Exporter. If Blackbox dies, there are no probe results, so `ServiceDown` cannot fire as a source, and `MonitoringCheckFailed` still reaches you.
 
@@ -296,7 +296,7 @@ What a silence does **not** do:
 Button names can differ slightly between Alertmanager versions.
 
 1. Open `http://<noc-core-ip>:9093` and click **New Silence**. Or click **Silence** next to a firing alert, which pre-fills its labels.
-2. Matchers: for maintenance on a host, use one matcher, `host` = `192.168.1.150`. That covers every alert of that host.
+2. Matchers: for maintenance on a host, use one matcher, `host` = `server-a`. That covers every alert of that host.
 3. Set the start and the duration (for example `2h`), your name as **Creator**, and a **Comment** with the reason.
 4. Click **Preview Alerts** to see which current alerts would match, then **Create**.
 
@@ -307,7 +307,7 @@ To end early: open *Silences*, select it and click **Expire**.
 ```bash
 # Silence everything on one host for 2 hours, starting now
 docker compose exec alertmanager amtool --alertmanager.url=http://localhost:9093 \
-  silence add host=192.168.1.150 --duration=2h \
+  silence add host=server-a --duration=2h \
   --author="<your-name>" --comment="Planned maintenance: kernel update"
 
 # List active silences (shows their IDs)
@@ -321,7 +321,7 @@ docker compose exec alertmanager amtool --alertmanager.url=http://localhost:9093
 
 To schedule maintenance in advance, use `--start` with an RFC 3339 time instead of starting now, for example `--start=2026-10-10T20:00:00+02:00 --duration=2h`.
 
-Matchers can be narrower: `alertname=ServiceSlow host=192.168.1.150` only mutes slowness on that host and keeps outage alerts active.
+Matchers can be narrower: `alertname=ServiceSlow host=server-a` only mutes slowness on that host and keeps outage alerts active.
 
 **Verify:** the silence is listed in *Silences* (UI) or `silence query`, and matching alerts show as silenced on the Alertmanager *Alerts* page.
 
@@ -415,28 +415,28 @@ Edit `to:` in `alertmanager/alertmanager.yml`. Separate several addresses with c
           Subject: '[CRITICAL] {{ .Status | toUpper }}: {{ .GroupLabels.alertname }} on {{ .GroupLabels.host }}'
 ```
 
-### Add a receiver for one group
+### Add a receiver for one owner
 
 > **Untested.** Not tried on this setup yet.
 
-Every alert carries the `group` label from its target. To also notify the owning group directly, add a receiver:
+Every target carries an `owner` label. To also notify the owner directly, add a receiver:
 
 ```yaml
-  - name: email-group-a
+  - name: email-team-a
     email_configs:
-      - to: '<group-a-contact>'
+      - to: '<team-a-contact>'
         send_resolved: true
         headers:
-          Subject: '[GROUP-A] {{ .Status | toUpper }}: {{ .GroupLabels.alertname }} on {{ .GroupLabels.host }}'
+          Subject: '[TEAM-A] {{ .Status | toUpper }}: {{ .GroupLabels.alertname }} on {{ .GroupLabels.host }}'
 ```
 
-Then add a route at the **top** of `routes:`, with `continue: true` so the alert still reaches the critical/warning/escalation routes below:
+Then add a route at the **top** of `routes:`, with `continue: true` so the alert still reaches the critical/warning/escalation routes below. The matcher must use the exact `owner` value from the target file:
 
 ```yaml
   routes:
     - matchers:
-        - group="group-a"
-      receiver: email-group-a
+        - owner="team-a"
+      receiver: email-team-a
       continue: true
     - matchers:
         - severity="critical"
@@ -444,7 +444,7 @@ Then add a route at the **top** of `routes:`, with `continue: true` so the alert
       # ... existing routes stay as they are
 ```
 
-Without `continue: true`, group-a alerts would **only** go to the group, and the NOC would stop seeing them.
+Without `continue: true`, team-a alerts would **only** go to the team, and the NOC would stop seeing them. An alert only matches if it still has the `owner` label, so aggregations such as `sum(...)` need `by (host, owner)`.
 
 **Apply and check:**
 
@@ -452,10 +452,10 @@ Without `continue: true`, group-a alerts would **only** go to the group, and the
 docker compose exec alertmanager amtool check-config /etc/alertmanager/alertmanager.yml
 docker compose restart alertmanager
 docker compose exec alertmanager amtool --alertmanager.url=http://localhost:9093 \
-  config routes test group=group-a severity=critical host=x alertname=Test
+  config routes test owner=team-a severity=critical host=x alertname=Test
 ```
 
-Expected receivers: `email-group-a,email-critical,email-escalation`.
+Expected receivers: `email-team-a,email-critical,email-escalation`.
 
 ---
 
@@ -551,14 +551,20 @@ In `prometheus/prometheus.yml`, add a second entry under `static_configs` of the
       - targets: ['node-exporter:9100']
         labels:
           host: noc-core
-          group: noc
+          service: node-exporter
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: 'external:docker'
       - targets: ['<host-ip>:9100']
         labels:
-          host: <host-ip>
-          group: group-a
+          host: <host-name>
+          service: node-exporter
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: '<dependencies>'
 ```
 
-Use **exactly the same `host` value** as this host's targets in `prometheus/targets/*.yml`. Grouping and the inhibit rules depend on it.
+Use **exactly the same `host` value** as this host's targets in `prometheus/targets/*.yml`. Grouping and the inhibit rules depend on it. Choose a readable machine name (for example `server-a`), not the IP address: the address is already in the `instance` label.
 
 ### 4. Apply and verify
 
@@ -568,18 +574,18 @@ docker compose restart prometheus
 ```
 
 - *Status → Target health*: the `node` job shows the new target as **UP**.
-- Query `node_filesystem_avail_bytes{host="<host-ip>"}`: it returns values.
+- Query `node_filesystem_avail_bytes{host="<host-name>"}`: it returns values.
 - `DiskSpaceLow`, `DiskWillFillSoon` and `MonitoringCheckFailed` now cover this host automatically.
-- Check the collectors: `node_scrape_collector_success{host="<host-ip>"}`. The ones you need should be `1`. Collectors for hardware the host doesn't have (for example `infiniband`, `fibrechannel`, `ipvs`, `nfsd`) show `0`. That is normal and not a problem.
+- Check the collectors: `node_scrape_collector_success{host="<host-name>"}`. The ones you need should be `1`. Collectors for hardware the host doesn't have (for example `infiniband`, `fibrechannel`, `ipvs`, `nfsd`) show `0`. That is normal and not a problem.
 
 ### Extra checks for a Proxmox host
 
 These worked on the Proxmox host (PVE 9, ZFS):
 
 ```promql
-node_hwmon_temp_celsius{host="<host-ip>"}                        # CPU, NVMe and NIC temperatures
-node_filesystem_avail_bytes{host="<host-ip>", fstype="zfs"}      # ZFS pools and one entry per LXC volume
-node_zfs_zpool_state{host="<host-ip>"}                           # pool health: state="online" is 1 when healthy
+node_hwmon_temp_celsius{host="<host-name>"}                        # CPU, NVMe and NIC temperatures
+node_filesystem_avail_bytes{host="<host-name>", fstype="zfs"}      # ZFS pools and one entry per LXC volume
+node_zfs_zpool_state{host="<host-name>"}                           # pool health: state="online" is 1 when healthy
 ```
 
 Notes:
@@ -658,8 +664,11 @@ Uncomment the `smartctl` job in your `prometheus/prometheus.yml` (the template h
     static_configs:
       - targets: ['<host-ip>:9633']
         labels:
-          host: <host-ip>
-          group: noc
+          host: <host-name>
+          service: smartctl-exporter
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: '<dependencies>'
 ```
 
 ```bash
@@ -672,8 +681,8 @@ Use the **same** `host` value as the node job and the probes for this machine: `
 Verify:
 
 - *Status → Target health*: the `smartctl` job shows **UP**.
-- `smartctl_device_smart_status{host="<host-ip>"}` returns one series per drive.
-- `smartctl_device_temperature{host="<host-ip>"}` returns the temperatures (label `temperature_type="current"`).
+- `smartctl_device_smart_status{host="<host-name>"}` returns one series per drive.
+- `smartctl_device_temperature{host="<host-name>"}` returns the temperatures (label `temperature_type="current"`).
 
 `MonitoringCheckFailed` already covers this job, so you are alerted if the exporter stops answering.
 
