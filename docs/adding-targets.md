@@ -46,7 +46,7 @@ Each file is a YAML list of **blocks**. One block holds one or more targets that
 | Field | Required | What it does | Where it is used |
 |---|---|---|---|
 | `targets` | yes | What to probe. The format depends on the module: a full URL for `http_2xx`, `host:port` for `tcp_connect`, a bare host or IP for `icmp`. | Becomes the `instance` label (see the relabeling in [configuration-reference.md](configuration-reference.md#job-blackbox)). Shown in alert descriptions ("Probe ... to `<instance>`"). |
-| `module` | yes | Which Blackbox module runs the probe. Must exist in `blackbox/blackbox.yml`: `http_2xx`, `tcp_connect` or `icmp`. | Passed to Blackbox as `?module=`. `ServiceSlow` only looks at `module="http_2xx"`. The inhibit rule uses it (`icmp` suppresses `http_2xx`). |
+| `module` | yes | Which Blackbox module runs the probe. Must exist in `blackbox/blackbox.yml`: `http_2xx`, `http_2xx_insecure`, `http_grafana_health`, `tcp_connect` or `icmp`. | Passed to Blackbox as `?module=`. `ServiceSlow` only looks at `module="http_2xx"`. The inhibit rule uses it (`icmp` suppresses `http_2xx`). |
 | `group` | yes (catalogue) | The owning group or team. | Shown in alert descriptions, so the receiver knows whom to contact. Useful for filtering in Grafana and silences. Not used for routing at the moment. |
 | `service` | yes (catalogue) | Human-readable service name, such as `wiki`, `ssh` or `ping`. | Alert summary: "`<service>` on `<host>` is unreachable". |
 | `host` | yes (catalogue) | The machine the service runs on. Use the **same value for every target on the same machine**. | Alertmanager groups emails by `alertname` and `host`. The inhibit rule matches on `host`. The email subject shows it. |
@@ -120,7 +120,7 @@ Passes when a TCP connection to `host:port` can be opened. Use it for services w
     dependencies: '<dependencies>'
 ```
 
-It only proves the port is open. It does not prove the service behind it works.
+It only proves the port is open. It does not prove the service behind it works. Tested on SSH of the Proxmox host: `probe_success` is 1, and goes to 0 when the target points to a closed port, after which `ServiceDown` fires and resolves by email.
 
 ### HTTPS service
 
@@ -139,7 +139,43 @@ Use the same `http_2xx` module with an `https://` URL. The HTTP prober checks th
     dependencies: '<dependencies>'
 ```
 
+**Self-signed or internal certificates** (for example the Proxmox web UI) fail `http_2xx`, because Blackbox cannot verify them. Use the `http_2xx_insecure` module instead. It accepts any certificate and still exports `probe_ssl_earliest_cert_expiry`, so you can see how long the certificate is valid:
+
+```yaml
+- targets:
+    - https://192.168.1.2:8006
+  labels:
+    module: http_2xx_insecure
+    group: group-a
+    service: proxmox-web
+    host: 192.168.1.2
+    owner: '<owner>'
+    contact: '<contact-person> (<contact-address>)'
+    dependencies: '<dependencies>'
+```
+
+With verification off, an **expired** certificate no longer fails the probe, so the `CertificateExpiringSoon` and `CertificateExpiryCritical` alerts are what protect you ([reference](configuration-reference.md#certificates)). Check the days left with `(probe_ssl_earliest_cert_expiry{service="proxmox-web"} - time()) / 86400`.
+
 To require exactly HTTP 200, or to make sure plain HTTP is never accepted, add a stricter module. See [configuration-reference.md](configuration-reference.md#adding-a-module).
+
+### Application check (the answer must prove the app works)
+
+`http_2xx` only proves that something answered with a 2xx status. Many apps answer 200 while a part of them is broken. A module with `fail_if_body_not_matches_regexp` also checks the body. The repo has one example, `http_grafana_health`, which needs HTTP 200 and `"database": "ok"` in Grafana's health endpoint:
+
+```yaml
+- targets:
+    - http://grafana:3000/api/health
+  labels:
+    module: http_grafana_health
+    group: noc
+    service: grafana-health
+    host: noc-core
+    owner: '<owner>'
+    contact: '<contact-person> (<contact-address>)'
+    dependencies: '<dependencies>'
+```
+
+If the body does not match, `probe_success` is 0 while `probe_http_status_code` is still 200, and `ServiceDown` fires after 2 minutes (tested, firing and resolved emails). That is the difference between "answers" and "works". For another application, copy the module in `blackbox/blackbox.yml`, give it its own name and change the regular expression to what a healthy response contains. Look at the real response first (`curl -s <url>`). `ServiceSlow` only watches `module="http_2xx"`, so a new module is not checked for slowness unless you change that alert.
 
 ## Combining ICMP and HTTP for one host
 

@@ -193,6 +193,21 @@ modules:
   icmp:
     prober: icmp
     timeout: 5s
+
+  http_2xx_insecure:
+    prober: http
+    timeout: 5s
+    http:
+      tls_config:
+        insecure_skip_verify: true
+
+  http_grafana_health:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - '"database":\s*"ok"'
 ```
 
 A **module** is a named probe recipe. Targets choose one with their `module` label.
@@ -202,10 +217,12 @@ A **module** is a named probe recipe. Targets choose one with their `module` lab
 | `http_2xx` | `http` | The URL returns a 2xx status (redirects are followed) within 5 s. For `https://` URLs, the TLS certificate must also be valid. | Websites, APIs, health endpoints |
 | `tcp_connect` | `tcp` | A TCP connection to `host:port` opens within 5 s | SSH, databases, any non-HTTP port |
 | `icmp` | `icmp` | The host answers ping within 5 s | Is the host/network reachable at all |
+| `http_2xx_insecure` | `http` | Like `http_2xx`, but the TLS certificate is **not verified** | HTTPS with a self-signed or internal certificate (Proxmox web UI). It still exports the certificate expiry. |
+| `http_grafana_health` | `http` | HTTP 200 **and** the body matches `"database": "ok"` | Application check: example for Grafana's `/api/health`. Copy it for other apps. |
 
 `timeout: 5s` is also the boundary between **slow** and **down**. A probe that takes longer than 5 s fails (`probe_success 0` → `ServiceDown`). A probe that succeeds but takes over 1 s is slow (`ServiceSlow`). Keep the timeout below the Prometheus `scrape_timeout` (10 s).
 
-All other settings use Blackbox defaults. For example, the HTTP prober does not skip TLS verification and prefers IPv6 when a hostname resolves to both IPv4 and IPv6.
+`http_2xx_insecure` and `http_grafana_health` are tested on this setup (a wrong body or a closed port makes `probe_success` 0, and `ServiceDown` fires and resolves by email). All other settings use Blackbox defaults. For example, the HTTP prober does not skip TLS verification and prefers IPv6 when a hostname resolves to both IPv4 and IPv6.
 
 ### Adding a module
 
@@ -248,7 +265,7 @@ docker compose exec blackbox blackbox_exporter --config.check --config.file=/etc
 
 ## prometheus/rules/alerts.yml
 
-All rules are in one file, in seven groups. Every alert has:
+All rules are in one file, in eight groups. Every alert has:
 
 - `labels.severity`: what Alertmanager routes on (`critical` or `warning`).
 - `annotations.summary` / `description`: the text in the email. `{{ $labels.x }}` inserts a label of the failing series, and `{{ $value }}` the value of the expression.
@@ -272,6 +289,8 @@ All rules are in one file, in seven groups. Every alert has:
 | DriveTemperatureHigh | hardware | warning | 5m | Tested (firing and resolved) |
 | DriveTemperatureCritical | hardware | critical | 2m | Tested (firing and resolved) |
 | MonitoringCheckFailed | monitoring-health | critical | 2m | Tested |
+| CertificateExpiringSoon | certificates | warning | 1h | Tested (firing and resolved, with a flipped threshold) |
+| CertificateExpiryCritical | certificates | critical | 10m | **Written, not tested yet** |
 | PveCriticalGuestNotRunning | proxmox | critical | 2m | Tested (firing and resolved) |
 | PveGuestNotRunning | proxmox | warning | 5m | Tested (firing and resolved) |
 
@@ -446,6 +465,23 @@ smartctl_device_temperature{host="<host-ip>"}    # drive temperatures
 Set the warning above your normal peak and the critical alert a few degrees below the chip's critical limit. Ignore limits that look absurd (such as `65261.85`): they mean "not set".
 
 ---
+
+### Certificates
+
+#### CertificateExpiringSoon and CertificateExpiryCritical
+
+```yaml
+expr: (probe_ssl_earliest_cert_expiry - time()) < 14 * 86400 and (probe_ssl_earliest_cert_expiry - time()) >= 3 * 86400 and probe_ssl_earliest_cert_expiry > 0   # warning, for: 1h
+expr: (probe_ssl_earliest_cert_expiry - time()) < 3 * 86400 and probe_ssl_earliest_cert_expiry > 0                                                              # critical, for: 10m
+```
+
+- **Detects:** the TLS certificate that an HTTPS probe sees expires within 14 days (warning) or within 3 days or has expired (critical).
+- **In plain language:** `probe_ssl_earliest_cert_expiry` is the expiry time of the certificate, as a Unix timestamp. Subtracting `time()` gives the seconds left. The two bands do not overlap (3 to 14 days is a warning, under 3 days is critical), so one certificate never sends two emails. The alert text shows the time left, because `$value` is the left side of `and`.
+- **Why 14 and 3 days:** automatic renewals (Let's Encrypt renews at 30 days left) happen long before 14 days, so reaching 14 days means a renewal failed, and there is still time to fix it. At 3 days it is an emergency. The measured certificate of the Proxmox web UI had 494 days left.
+- **Why `for` is long:** a certificate changes by days, not seconds. `for` only filters out one odd probe, so 1h (warning) costs nothing, and 10m (critical) is shorter because little time is left.
+- **Why `> 0`:** the metric only exists for TLS targets. The guard keeps a probe without a certificate from looking "already expired".
+- **Important with `http_2xx_insecure`:** that module does not verify certificates, so an expired certificate still gives `probe_success` 1. These alerts are the only protection. With the normal `http_2xx` module, an expired certificate also fails the probe (`ServiceDown`).
+- **Status:** `CertificateExpiringSoon` tested with a flipped threshold (firing and resolved emails). `CertificateExpiryCritical` is written but its flip test has not been shown yet.
 
 ### Proxmox guests
 

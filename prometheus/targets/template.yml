@@ -7,7 +7,9 @@
 # One block per (module, host/service). Add targets to a block, or copy a block.
 #
 # Available modules are defined in blackbox/blackbox.yml:
-#   http_2xx, tcp_connect, icmp
+#   http_2xx, http_2xx_insecure, http_grafana_health, tcp_connect, icmp
+#   (http_2xx_insecure: HTTPS with a self-signed certificate; http_grafana_health: HTTP 200 and the
+#   body must contain "database": "ok", an example of an application check)
 
 # HTTP(s) health check — expects a 2xx response.
 # - targets:

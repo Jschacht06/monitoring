@@ -59,12 +59,15 @@ Tested end to end:
 - **Drive health** through smartctl_exporter (SMART status and drive temperatures of the physical drives).
 - **Alerts for drives, ZFS and temperatures**: `SmartStatusFailed`, `DriveNotReadable`, `ZfsPoolNotOnline` and five temperature alerts (`HostTemperatureHigh`/`Critical`, `NvmeTemperatureHigh`, `DriveTemperatureHigh`/`Critical`). All were tested by flipping their condition, with the firing and resolved emails. `DriveNotReadable` fired for a real faulted drive.
 - **Proxmox guests** through pve-exporter (read-only API token): the status of every VM and LXC. Guests are chosen with Proxmox tags: `monitored-critical` (critical alert after 2 minutes) and `monitored-warning` (warning alert after 5 minutes). Both alerts were tested end to end on a stopped LXC, with the firing and resolved emails. See [docs/how-to-guides.md](docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter).
+- **Extra checks**: a TCP check on SSH (`tcp_connect`), an HTTPS target with a self-signed certificate (`http_2xx_insecure`, Proxmox web UI) and an application check that needs HTTP 200 **and** `"database": "ok"` in Grafana's health answer (`http_grafana_health`). Each one was shown failing when broken on purpose, with the `ServiceDown` firing and resolved emails for the TCP and application checks.
+- **Alert `CertificateExpiringSoon`** (warning): an HTTPS certificate expires within 14 days. Tested by flipping the threshold, with firing and resolved emails.
 - **Flip test**: a way to prove an alert end to end without breaking anything, see [docs/how-to-guides.md](docs/how-to-guides.md#test-an-alert-by-flipping-its-condition).
 - **Grafana** with Prometheus as a data source (added by hand).
 - **Service catalogue documentation and dashboard template**: ownership, contacts and dependencies; see [grafana/docs/service-catalogue.md](grafana/docs/service-catalogue.md).
 
 Written but not tested:
 
+- **Alert `CertificateExpiryCritical`** (critical): a certificate expires within 3 days or has expired. Its flip test is pending.
 - **Alert `DiskWillFillSoon`** (warning): a linear forecast says the disk is full within 24 hours. It needs hours of real disk growth to test, so it has not fired yet.
 - **Alert `DriveDisappeared`** (critical): a drive that reported SMART data 24 hours ago and does not now. A real test needs a drive to be unplugged.
 - **Health/resource dashboard guides and templates**: a next-step implementation guide, two manual-import dashboards and proposed Smith API/resource-budget rules. They have not been imported or tested on the running school/home environment; see [grafana/docs/health-and-usage-dashboards.md](grafana/docs/health-and-usage-dashboards.md).
