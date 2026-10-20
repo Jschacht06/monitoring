@@ -44,12 +44,12 @@ In Prometheus, check *Status → Configuration*, *Command-line flags* and *Targe
 
 For the probe panels, the health template has two hidden **Constant** variables: `probe_interval_s=30` (coverage denominator) and `probe_freshness_s=90` (maximum accepted sample age, exclusive). Set the first to the verified interval in seconds; choose the second longer than normal scrape completion and jitter, typically three intervals for this stack. Also update the status-history **Min interval** separately if collection is not every 30s. One coverage constant assumes every selected check uses the same interval; split dashboards or adapt the coverage calculation if intervals differ. These display settings do not change Prometheus collection. See [Constant variables](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/add-template-variables/#add-a-constant-variable).
 
-**Check:** compare current `up{job="blackbox"}` with the agreed service/check list and the target files; no metric query can find a target that was never configured. Each expected probe needs `group`, `service`, `host`, `module`, `owner`, `contact` and `dependencies`. Confirm the `module` label matches the actual `?module=` relabeling and that `instance` is the destination, not `blackbox:9115`. The supplied [target guide](../../docs/adding-targets.md) describes this layout. An empty HTTP-duration query is expected if there are no HTTP checks with module names starting `http_`, or all are failing. The current template includes all `http_.*` modules; other naming conventions require explicitly updating the panel selector.
+**Check:** compare current `up{job="blackbox"}` with the agreed service/check list and the target files; no metric query can find a target that was never configured. Each expected probe needs `service`, `host`, `module`, `owner`, `contact` and `dependencies`. Confirm the `module` label matches the actual `?module=` relabeling and that `instance` is the destination, not `blackbox:9115`. The supplied [target guide](../../docs/adding-targets.md) describes this layout. An empty HTTP-duration query is expected if there are no HTTP checks with module names starting `http_`, or all are failing. The current template includes all `http_.*` modules; other naming conventions require explicitly updating the panel selector.
 
-The joins below use `job,instance,module,group,service,host,owner,contact,dependencies`. Run this current query; it must return no rows:
+The joins below use `job,instance,module,service,host,owner,contact,dependencies`. Run this current query; it must return no rows:
 
 ```promql
-count by (job,instance,module,group,service,host,owner,contact,dependencies) (
+count by (job,instance,module,service,host,owner,contact,dependencies) (
   up{job="blackbox"}
 ) > 1
 ```
@@ -101,7 +101,7 @@ Status history uses separate cells. An explicit point setting requests a coarser
 
 1. Save a local copy named `service-health-dashboard.json`.
 2. Replace `<your dashboard title here>`, `<your description here>` and `<your environment tag here>`. Suggested title: **Service health and trends**; environment tag: `school` or `home-test`.
-3. Confirm the six variables are group, service, disk_host, probe_interval_s, probe_freshness_s and disk_freshness_s, with each name defined once. The current template is already cleaned up; remove duplicate definitions only from an older copy. Keep `id: null`, `uid: null` and every `${DS_PROMETHEUS}` reference. These create a new dashboard and let the import form select the destination source. Check the hidden Constant variables in the JSON against step 1 before import; edit their `query`, `current.text`, `current.value` and `options` value consistently, or adjust them afterward in Variables.
+3. Confirm the five variables are service, disk_host, probe_interval_s, probe_freshness_s and disk_freshness_s, with each name defined once. For an existing dashboard, replace its panel queries and transformations from this template and delete the old `group` variable. Save it and reload with Service = All; updating the repository alone does not update an imported dashboard. Keep `id: null`, `uid: null` and every `${DS_PROMETHEUS}` reference. These create a new dashboard and let the import form select the destination source. Check the hidden Constant variables in the JSON against step 1 before import; edit their `query`, `current.text`, `current.value` and `options` value consistently, or adjust them afterward in Variables.
 4. In Grafana, go to *Dashboards → New → Import dashboard* and upload the complete local JSON file.
 5. Choose the project folder and the existing Prometheus source. Use a new UID; leave the catalogue's UID alone.
 6. Click **Import**, choose **All** for the filters, and set the time range to **Last 6 hours**, ending at **now**, with **30s** refresh.
@@ -124,37 +124,37 @@ Long periods show sampled status at a wider time step and can miss short outages
 
 ## 4. Configure the filters (also used when building manually)
 
-The template already supplies `group`, `service` and `disk_host`; importing it does not require adding them again. Step 4 checks the probe filters; the independent Disk host filter is explained under [Host disk SMART health](#host-disk-smart-health).
+The service-health dashboard no longer uses a target `group` label. Smith’s resource dashboard keeps its independent budget `group`, populated by the reviewed guest inventory.
+
+The template already supplies `service` and `disk_host`; importing it does not require adding them again. Step 4 checks the probe filters; the independent Disk host filter is explained under [Host disk SMART health](#host-disk-smart-health).
 
 The supplied setup guide lists Grafana **13.2.2**; verify the running version. Current Grafana documentation describes the following editor paths; menu names and preview features vary by version:
 
 1. Open the dashboard and click **Edit** in the upper-right toolbar.
 2. Click the **Dashboard options** icon to open its sidebar. Hover over the toolbar icons to find the one with that name.
 3. For general dashboard settings, click **View all settings** in the sidebar. This is where the title, time options and JSON model are located.
-4. For the existing filters, stay in Dashboard options, expand **Variables** and click the edit icon beside `group` or `service`. Variables are managed in this sidebar rather than in the general settings page.
+4. For the existing filters, stay in Dashboard options, expand **Variables** and click the edit icon beside `service` or `disk_host`. Variables are managed in this sidebar rather than in the general settings page.
 5. To create a missing variable during a manual build, click the blue **Add new element (+)** button, choose **Variable**, then **Query**. Select the Prometheus source and use **Label values** with the table below.
 
 These paths follow Grafana's [dashboard settings](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/modify-dashboard-settings/) and [dashboard controls](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/create-dashboard/dashboard-controls/) documentation. If your running instance uses the older dashboard editor, open the **Settings/gear** icon (sometimes available after clicking Edit), then **Variables** to edit the imported variables or add a missing one.
 
 | Name | Label | Metric selector | Options |
 |---|---|---|---|
-| `group` | `group` | `up{job="blackbox",group!=""}` | Multi-value, Include All, Custom all value `.*` |
-| `service` | `service` | `up{job="blackbox",group=~"$group",service!=""}` | Multi-value, Include All, Custom all value `.*` |
+| `service` | `service` | `up{job="blackbox",service!=""}` | Multi-value, Include All, Custom all value `.*` |
 | `disk_host` | `host` | `up{job="smartctl",host!=""}` | Multi-value, Include All, Custom all value `.*`; disk table only |
 
-Set refresh to **On dashboard load**. Changing `group` refreshes the dependent `service` variable; use All again if a previously selected service does not exist in the new group. After target changes, reload the dashboard to refresh options. Label-value queries can include historical series, so an old dropdown value can legitimately produce No data in the current table. For older/classic editors, the equivalent queries are:
+Set refresh to **On dashboard load**. After target changes, reload the dashboard to refresh options. Label-value queries can include historical series, so an old dropdown value can legitimately produce No data in the current table. For older/classic editors, the equivalent queries are:
 
 ```text
-label_values(up{job="blackbox",group!=""}, group)
-label_values(up{job="blackbox",group=~"$group",service!=""}, service)
+label_values(up{job="blackbox",service!=""}, service)
 label_values(up{job="smartctl",host!=""}, host)
 ```
 
-These are **Grafana variable queries**, not PromQL to paste into Prometheus. Multi-value variables require regex matchers such as `group=~"$group"`; see [Grafana's Prometheus variable documentation](https://grafana.com/docs/grafana/latest/datasources/prometheus/template-variables/).
+These are **Grafana variable queries**, not PromQL to paste into Prometheus. Multi-value variables require regex matchers such as `service=~"$service"`; see [Grafana's Prometheus variable documentation](https://grafana.com/docs/grafana/latest/datasources/prometheus/template-variables/).
 
 Check hidden Constant variables `probe_interval_s` and `probe_freshness_s` here too. For a manual build, create those variables with the values verified in step 1. Save the dashboard after variable edits, then **Exit edit**. If the imported filters already match the table and work correctly, continue without changing them.
 
-**Check:** selecting one group narrows every health panel and the service dropdown. The catalogue still lists scrape-only services too; this dashboard deliberately shows destination probes. A service with no agreed probe has no measured destination health.
+**Check:** selecting one service narrows every probe-health panel; Disk host independently filters the SMART table. The catalogue still lists scrape-only services too; this dashboard deliberately shows destination probes. A service with no agreed probe has no measured destination health.
 
 ---
 
@@ -170,14 +170,14 @@ Use this expression for the table and the status-history panel. Known states req
 
 ```promql
 (
-  probe_success{job="blackbox",group=~"$group",service=~"$service"}
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies)
-  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+  probe_success{job="blackbox",service=~"$service"}
+  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job="blackbox",service=~"$service"} == 1)
+  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",service=~"$service"}) < $probe_freshness_s)
+  and on(job,instance,module,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_success{job="blackbox",service=~"$service"}) < $probe_freshness_s)
 )
-or on(job,instance,module,group,service,host,owner,contact,dependencies)
-(-1 + 0 * up{job="blackbox",group=~"$group",service=~"$service"})
+or on(job,instance,module,service,host,owner,contact,dependencies)
+(-1 + 0 * up{job="blackbox",service=~"$service"})
 ```
 
 | Setting | Value |
@@ -185,8 +185,8 @@ or on(job,instance,module,group,service,host,owner,contact,dependencies)
 | Title / visualization | Current probe checks / Table |
 | Query | Instant; Format Table |
 | Transformation | Organize fields by name; hide Time and job |
-| Column order | group, service, host, module, instance, owner, contact, dependencies, Value |
-| Display names | Group, Service, Host, Check, Target, Owner, Contact, Dependencies, Status |
+| Column order | service, host, module, instance, owner, contact, dependencies, Value |
+| Display names | Service, Host, Check, Target, Owner, Contact, Dependencies, Status |
 | Value mappings on Status only | `1` → Up (green); `0` → Down (red); `-1` → Unknown (gray) |
 | Status cell type | Colored background |
 | No value | Unknown |
@@ -202,7 +202,7 @@ Once a target is removed or its `up` series becomes stale, it disappears from cu
 **Visible probe checks:**
 
 ```promql
-count(up{job="blackbox",group=~"$group",service=~"$service"})
+count(up{job="blackbox",service=~"$service"})
 ```
 
 This counts currently queryable `up` series, including failed scrapes. It does not prove that all intended checks have been configured.
@@ -211,28 +211,28 @@ This counts currently queryable `up` series, including failed scrapes. It does n
 
 ```promql
 count((
-  probe_success{job="blackbox",group=~"$group",service=~"$service"}
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies)
-  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+  probe_success{job="blackbox",service=~"$service"}
+  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job="blackbox",service=~"$service"} == 1)
+  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",service=~"$service"}) < $probe_freshness_s)
+  and on(job,instance,module,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_success{job="blackbox",service=~"$service"}) < $probe_freshness_s)
 ) == 0)
-or (0 * count(up{job="blackbox",group=~"$group",service=~"$service"}))
+or (0 * count(up{job="blackbox",service=~"$service"}))
 ```
 
 **Unknown probe checks:**
 
 ```promql
 count(((
-  probe_success{job="blackbox",group=~"$group",service=~"$service"}
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies)
-  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+  probe_success{job="blackbox",service=~"$service"}
+  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job="blackbox",service=~"$service"} == 1)
+  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",service=~"$service"}) < $probe_freshness_s)
+  and on(job,instance,module,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_success{job="blackbox",service=~"$service"}) < $probe_freshness_s)
 )
-or on(job,instance,module,group,service,host,owner,contact,dependencies)
-(-1 + 0 * up{job="blackbox",group=~"$group",service=~"$service"})) == -1)
-or (0 * count(up{job="blackbox",group=~"$group",service=~"$service"}))
+or on(job,instance,module,service,host,owner,contact,dependencies)
+(-1 + 0 * up{job="blackbox",service=~"$service"})) == -1)
+or (0 * count(up{job="blackbox",service=~"$service"}))
 ```
 
 For both fault counters, use absolute thresholds **base green, 1 red**. The Unknown counter includes failed scrapes, missing `probe_success` and old samples while `up` remains visible. Both fallbacks produce zero only while selected inventory exists. Read all three counters together; zero failed checks with unknown checks is inconclusive.
@@ -254,7 +254,7 @@ The status-history and HTTP-duration panels use query type **Range**, format **T
 | Observed probe availability | Stat (Instant query) | Percent (0–100); 2 decimals; No value Unknown; legend `{{service}}` |
 | Probe sample coverage | Stat (Instant query) | Percent (0–100); 1 decimal; No value Unknown; legend `{{service}}` |
 
-All four panels display only the `service` label from the Prometheus target file (for example `jellyfin`), using the query legend `{{service}}`. This changes names only: each probe remains a separate series with its original labels and query. Multiple checks or historical label changes can therefore produce repeated service names; use the group/service filters and **Current probe checks** table to inspect the host, module and destination.
+All four panels display only the `service` label from the Prometheus target file (for example `jellyfin`), using the query legend `{{service}}`. This changes names only: each probe remains a separate series with its original labels and query. Multiple checks or historical label changes can therefore produce repeated service names; use the service filter and **Current probe checks** table to inspect the host, module and destination.
 
 To update an existing dashboard without re-importing it:
 
@@ -289,21 +289,21 @@ To edit the query on a dashboard that was imported earlier:
 4. In the query area, open **Queries** and select query **A**. In the newer editor, select the **A** card under **Queries & expressions**.
 5. Switch the Prometheus query editor from **Builder** to **Code**.
 6. In that query, replace all four occurrences of `module="http_2xx"` with `module=~"http_.*"`. Keep every success, scrape-health and freshness condition.
-7. Click **Run queries** or **Refresh**. Keep query type **Range**, result format **Time series**, unit seconds and the existing group/service filters.
+7. Click **Run queries** or **Refresh**. Keep query type **Range**, result format **Time series**, unit seconds and the existing service filter.
 8. Return to the dashboard using **Back to dashboard** or **Apply**, then **Save** the dashboard.
 
 The current import template already has this query; a fresh import needs no manual query change. The selector matches HTTP modules named with the `http_` prefix, including `http_2xx`, `http_2xx_insecure` and `http_grafana_health`. If all current probes use `http_2xx`, the displayed results should stay the same. Other naming conventions require an explicit selector update.
 
 ```promql
 (
-  probe_duration_seconds{job="blackbox",group=~"$group",service=~"$service",module=~"http_.*"}
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (probe_success{job="blackbox",group=~"$group",service=~"$service",module=~"http_.*"} == 1)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies)
-  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service",module=~"http_.*"}) < $probe_freshness_s)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies)
-  (time() - timestamp(probe_duration_seconds{job="blackbox",group=~"$group",service=~"$service",module=~"http_.*"}) < $probe_freshness_s)
+  probe_duration_seconds{job="blackbox",service=~"$service",module=~"http_.*"}
+  and on(job,instance,module,service,host,owner,contact,dependencies) (probe_success{job="blackbox",service=~"$service",module=~"http_.*"} == 1)
+  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job="blackbox",service=~"$service"} == 1)
+  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",service=~"$service"}) < $probe_freshness_s)
+  and on(job,instance,module,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_success{job="blackbox",service=~"$service",module=~"http_.*"}) < $probe_freshness_s)
+  and on(job,instance,module,service,host,owner,contact,dependencies)
+  (time() - timestamp(probe_duration_seconds{job="blackbox",service=~"$service",module=~"http_.*"}) < $probe_freshness_s)
 )
 ```
 
@@ -312,8 +312,8 @@ The template already has a visible reference line at **1 second**. Match it to t
 For **Observed probe availability**, use an Instant query with one result per check:
 
 ```promql
-(100 * avg_over_time(probe_success{job="blackbox",group=~"$group",service=~"$service"}[$__range]))
-or on(job,instance,module,group,service,host,owner,contact,dependencies) (-1 + 0 * up{job="blackbox",group=~"$group",service=~"$service"})
+(100 * avg_over_time(probe_success{job="blackbox",service=~"$service"}[$__range]))
+or on(job,instance,module,service,host,owner,contact,dependencies) (-1 + 0 * up{job="blackbox",service=~"$service"})
 ```
 
 Add a value mapping `-1 → Unknown` (gray). The sentinel covers a visible check with no recorded `probe_success` samples in the selected range; it is not a negative percentage.
@@ -322,10 +322,10 @@ For **Probe sample coverage**, also use Instant:
 
 ```promql
 clamp_max(
-  100 * count_over_time(probe_success{job="blackbox",group=~"$group",service=~"$service"}[$__range]) / ($__range_s / $probe_interval_s),
+  100 * count_over_time(probe_success{job="blackbox",service=~"$service"}[$__range]) / ($__range_s / $probe_interval_s),
   100
 )
-or on(job,instance,module,group,service,host,owner,contact,dependencies) (0 * up{job="blackbox",group=~"$group",service=~"$service"})
+or on(job,instance,module,service,host,owner,contact,dependencies) (0 * up{job="blackbox",service=~"$service"})
 ```
 
 Use legend `{{service}}` for both. `$__range` and `$__range_s` are Grafana time-range variables. Coverage uses `probe_interval_s` from step 1. The estimate is approximate at boundaries and with timing jitter and is clamped at 100%; use a range substantially longer than one scrape interval.
@@ -342,23 +342,23 @@ The health template includes **HTTPS certificate days remaining**, with its quer
 
 ```promql
 (
-  (probe_ssl_earliest_cert_expiry{job="blackbox",group=~"$group",service=~"$service"} - time()) / 86400
+  (probe_ssl_earliest_cert_expiry{job="blackbox",service=~"$service"} - time()) / 86400
 )
-and on(job,instance,module,group,service,host,owner,contact,dependencies)
-(probe_ssl_earliest_cert_expiry{job="blackbox",group=~"$group",service=~"$service"} > 0)
-and on(job,instance,module,group,service,host,owner,contact,dependencies)
-(up{job="blackbox",group=~"$group",service=~"$service"} == 1)
-and on(job,instance,module,group,service,host,owner,contact,dependencies)
-(time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
-and on(job,instance,module,group,service,host,owner,contact,dependencies)
-(time() - timestamp(probe_ssl_earliest_cert_expiry{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+and on(job,instance,module,service,host,owner,contact,dependencies)
+(probe_ssl_earliest_cert_expiry{job="blackbox",service=~"$service"} > 0)
+and on(job,instance,module,service,host,owner,contact,dependencies)
+(up{job="blackbox",service=~"$service"} == 1)
+and on(job,instance,module,service,host,owner,contact,dependencies)
+(time() - timestamp(up{job="blackbox",service=~"$service"}) < $probe_freshness_s)
+and on(job,instance,module,service,host,owner,contact,dependencies)
+(time() - timestamp(probe_ssl_earliest_cert_expiry{job="blackbox",service=~"$service"}) < $probe_freshness_s)
 ```
 
 | Setting | Value |
 |---|---|
 | Query type / format | Instant / Table |
-| Visible fields | group, service, host, module, instance, Value |
-| Display names | Group, Service, Host, Check, Target, Days remaining |
+| Visible fields | service, host, module, instance, Value |
+| Display names | Service, Host, Check, Target, Days remaining |
 | Hidden fields, if present | Time, job, __name__, owner, contact, dependencies |
 | Override matcher | Fields with name: Days remaining |
 | Unit / decimals | Days / 1 |
@@ -374,7 +374,7 @@ For a homelab without HTTPS services, use the [temporary public HTTPS example](.
 
 **Homelab confirmation — 16 October 2026:** the operator confirmed the manually configured certificate panel works after changing the existing `http_2xx` module to prefer IPv4. The original probe had selected an IPv6 destination with no working route. This confirms that live configuration and display; fresh import of the updated complete template, school deployment and critical-certificate notification testing remain separate checks.
 
-**Check:** select the HTTPS target's group/service and compare the panel's days remaining with the same query in Explore. Confirm the numeric cells have the expected colour and HTTP-only services are absent. Preserve evidence of the working display.
+**Check:** select the HTTPS target's service and compare the panel's days remaining with the same query in Explore. Confirm the numeric cells have the expected colour and HTTP-only services are absent. Preserve evidence of the working display.
 
 ---
 
@@ -391,7 +391,6 @@ When monitoring runs in a **Debian VM on Titan**, collect physical-drive SMART d
     static_configs:
       - targets: ['<titan-ip>:9633']
         labels:
-          group: host
           host: titan
           service: smartctl-exporter
           owner: '<owner>'
@@ -401,7 +400,7 @@ When monitoring runs in a **Debian VM on Titan**, collect physical-drive SMART d
 
 Fill in the real address and ownership values, then follow the linked exporter guide to validate the configuration and restart/reload Prometheus. Select **Disk host → titan** after the first successful scrape. The source queried on 20 October 2026 returned only `prometheus`, `node` and `blackbox` targets and no SMART metrics, so this collector/scrape setup is still required for that source.
 
-The **Disk host** variable (`disk_host`) lists `host` values from `up{job="smartctl",host!=""}` and defaults to All. It filters only this table. The existing Group and Service filters still apply only to the probe panels; services and the SMART exporter have different target labels. To inspect the disks behind a service, find its Host in **Current probe checks** and select that value under Disk host.
+The **Disk host** variable (`disk_host`) lists `host` values from `up{job="smartctl",host!=""}` and defaults to All. It filters only this table. The Service filter applies only to the probe panels; services and the SMART exporter have different target labels. To inspect the disks behind a service, find its Host in **Current probe checks** and select that value under Disk host.
 
 The hidden Constant `disk_freshness_s=180` is the maximum accepted Prometheus sample age in seconds (exclusive) for both the SMART status and `up`. Verify the actual smartctl job scrape interval; increase the tolerance if necessary. A fresh scrape with a valid `0` or `1` is required to show Failed or Passed. This checks scrape/sample freshness, not when the exporter last polled the drive: its cached data and polling failures still need investigation in exporter logs.
 
@@ -438,7 +437,7 @@ docker compose exec -T prometheus promtool query instant \
   http://localhost:9090 'smartctl_device{job="smartctl"}'
 ```
 
-In Grafana Explore, run query A with `$disk_host` replaced by `.*` and `$disk_freshness_s` by `180`; this checks the complete query against the live source without relying on dashboard variables. Compare every disk with the table, confirm the Passed/Failed colors, and select a Disk host. Changing Group/Service must not change this table. A failed exporter scrape must show known disks as Unknown rather than preserving Passed; validate that during an agreed monitoring test, without unplugging disks just to test a dashboard. No live SMART-table acceptance is claimed by the earlier service-health screenshots.
+In Grafana Explore, run query A with `$disk_host` replaced by `.*` and `$disk_freshness_s` by `180`; this checks the complete query against the live source without relying on dashboard variables. Compare every disk with the table, confirm the Passed/Failed colors, and select a Disk host. Changing Service must not change this table. A failed exporter scrape must show known disks as Unknown rather than preserving Passed; validate that during an agreed monitoring test, without unplugging disks just to test a dashboard. No live SMART-table acceptance is claimed by the earlier service-health screenshots.
 
 ---
 
@@ -524,7 +523,8 @@ Use a disposable service you control for failure tests. Agree the test window wi
 | Scenario | Procedure | Expected result / evidence |
 |---|---|---|
 | Persistence | Save both dashboards, close/reopen Grafana | Both are under Dashboards; the catalogue still opens |
-| Group filter | Select one group, then All | Every health panel follows the selection; resource totals remain separate per group |
+| Service filter | Select one service, then All | Every probe-health panel follows the selection; Disk host filters SMART separately |
+| Smith group filter | Select one budget group, then All | Resource totals remain separate per budget group |
 | Failed destination | Stop the disposable service while its scrape remains healthy, then restore it | Table Down, failed-check count increases, red history segment, then Up/green; record detection/recovery times |
 | Failed monitoring | In a home/test stack, add a temporary probe with an invalid module name, wait for discovery, then remove it | Its `/probe` scrape fails: row Unknown, Unknown-check count increases; verify `up=0` in Explore |
 | Alert timing | Observe the disposable failure for long enough if testing alerting too | Dashboard changes on the first failed scrape; `ServiceDown` follows its loaded `for` duration (the supplied reference says 2m) plus rule-evaluation timing; email adds Alertmanager routing/group delays |
@@ -574,3 +574,13 @@ Export each saved dashboard as **Classic JSON** with **Share dashboard with anot
 To undo a dashboard import, remove only the new dashboard from Grafana or reimport its previous export using the same UID. To undo configuration changes, restore only the affected files from step 2's backup, preserving your partner's later work, validate, then reload/recreate the affected service. Never remove data volumes to undo a dashboard edit.
 
 Next guide: [smith-resource-metrics.md](smith-resource-metrics.md) supplies the additional data for step 7.
+
+## Local query regression checks
+
+Run from the monitoring repository root with Python 3.14 and Docker available:
+
+```bash
+python -B grafana/test_queries.py --docker
+```
+
+Alternatively use `--promtool /path/to/promtool` with Prometheus v3.13.3. The runner reads expressions directly from both dashboard templates and checks 11 scenarios against real Prometheus: complete targets without `group`, missing/empty metadata, per-service counting, absent inventory, healthy/down/unknown probes, stale samples and All/single-service filtering. On 20 October 2026 these scenarios passed locally; two complete services without `group` produced a missing-metadata count of 0. This does not establish import or live acceptance on the monitoring server.

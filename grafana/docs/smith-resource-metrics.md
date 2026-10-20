@@ -17,7 +17,7 @@ Placeholders used in this guide:
 | `<approved-image-digest>` | SHA-256 digest of the reviewed PVE exporter image |
 | `<monitoring-user>@pve` | Dedicated read-only account provided by the administrator |
 | `<token-name>` / `<token-secret>` | API token ID component and secret, stored outside Git |
-| `<group-name>` | Existing catalogue group label, e.g. `noc` or `group-a` |
+| `<group-name>` | Reviewed budget group, e.g. `noc` or `group-a`; independent of service-target labels |
 | `<type>/<vmid>` | Exact guest ID, e.g. `lxc/101` or `qemu/102` |
 | `<same-host-label-as-probes>` | Existing stable `host` value for that guest |
 | `<owner>` / `<contact-person>` / `<contact-address>` | Responsible owner and agreed contact details for the collector |
@@ -47,6 +47,8 @@ For this first dashboard, disk allocation is a reviewed sum of provisioned guest
 Include stopped guests in allocation totals unless the budget owner explicitly uses a different policy. The live rules exclude `template="1"`. Include charged template disks separately in reviewed disk inventory. If the budget also charges template CPU/RAM, this live recipe is incomplete: add a reviewed allocation source before reporting budget compliance.
 
 The CPU bar uses the API's `maxcpu`, exported as `pve_cpu_usage_limit`; this is available guest CPU capacity, not a reservation or CPU quota. In Proxmox's [LXC implementation](https://github.com/proxmox/pve-container/blob/master/src/PVE/LXC.pm), it can come from `cores`, then `cpulimit`, then host CPU count. Confirm that this matches the approved vCPU accounting policy, especially for an unlimited container. If it does not, use a reviewed allocation inventory instead of claiming the API bar proves compliance.
+
+**Handover inputs still needed:** provide the approved API endpoint/node and certificate trust, a scoped read-only token through the agreed secret store (including expiry/rotation owner), the complete authorized guest list (`qemu/<vmid>` or `lxc/<vmid>`, stable host and budget group, including stopped guests), and dated CPU/RAM/disk budgets with units and disk-charging policy. These are deployment inputs; template values must not be treated as approved allocations.
 
 **Check:** there is a dated scope/budget decision and a complete guest list. If credentials or access are pending, the service-health dashboard can still proceed; leave Smith live usage pending instead of inferring it from noc-core's Node Exporter.
 
@@ -206,7 +208,6 @@ If a `pve` job already exists, update that single job's missing metadata and ver
     static_configs:
       - targets: ['<smith-api-host>']
         labels:
-          group: noc
           service: pve-exporter
           host: noc-core
           owner: '<owner>'
@@ -225,7 +226,7 @@ The resource-only example calls `/pve?target=<smith-api-host>&module=default&clu
 
 Add **one** target for this cluster's resource collection. Scraping each cluster node with `cluster=1` duplicates guest data and breaks joins/sums. A separate home environment uses its own source/configuration. Multiple clusters would need an explicit cluster identity in every inventory key and join; that extension is outside this single-school-cluster recipe.
 
-The static `group: noc` identifies the **monitoring scrape** in the catalogue. It does not assign every guest to the NOC group. Step 7 replaces that label on normalized guest metrics using a reviewed guest-to-group mapping.
+The scrape uses the five catalogue labels: `service`, `host`, `owner`, `contact` and `dependencies`. Budget `group` labels are added separately to normalized guest metrics by the reviewed guest-to-group mapping in step 7. A service target does not need a `group` label.
 
 Validate, then reload without enabling the HTTP lifecycle endpoint:
 
@@ -295,14 +296,14 @@ If that local file already exists, edit it directly. The template is not a valid
 Complete the sections in this order:
 
 1. Replace the review date and budget-owner comment with the approved decision reference.
-2. Repeat the three `noc_group_*_budget_*` records for **each** approved group. Give each a positive numeric `vector(...)` value and the same `group` label as its service catalogue.
+2. Repeat the three `noc_group_*_budget_*` records for **each** approved group. Give each a positive numeric `vector(...)` value and the same reviewed `group` value as its guest inventory.
 3. Repeat the `noc_guest_info` / `noc_guest_disk_allocated_bytes` pair for **every** in-scope live guest, including stopped ones. Each ID belongs to exactly one group. Match `host` to its existing probes and guest exporter.
 4. Calculate each disk record from all provisioned volumes charged to that guest. Record the source and review date in the comment. Shared volumes must have an agreed attribution and must not be counted twice.
 5. Replace `<smith-node-name>` in the two shared scope expressions with the exact API label from step 6. Keep the shared normalized/group rule section **once**, after all inventory/budget records.
 
 For example, **only on a disposable home test**, a group with an approved 8-vCPU, 16-GiB RAM, 100-GiB disk budget would use `vector(8)`, `vector(17179869184)` and `vector(107374182400)`. A test guest with 30 GiB total provisioned disks would use `vector(32212254720)` for its disk record. These numbers are examples, not Smith allocations or a recommended school budget.
 
-The mapping is deliberately separate from the service labels: the exporter identifies guests as `qemu/<vmid>` or `lxc/<vmid>`, while the catalogue identifies services by group/service/host. The supplied rules join these using `id`, add group/host metadata and keep the API's node/name labels. They do not assume a probe IP is a VMID or that a guest name reliably encodes ownership.
+The mapping is deliberately separate from the service labels: the exporter identifies guests as `qemu/<vmid>` or `lxc/<vmid>`, while the catalogue identifies services by service/host. The supplied rules join these using `id`, add group/host metadata and keep the API's node/name labels. They do not assume a probe IP is a VMID or that a guest name reliably encodes ownership.
 
 The rules evaluate once per minute. `noc_pve_source_ready` exists only when exactly one `pve` target is up and its latest `up` sample is less than 90 seconds old. Duplicate API IDs or inventory mappings are filtered before arithmetic joins, and source joins include `job`, `instance` and `id`. CPU/RAM capacity must be positive; usage can be zero. A group's live total disappears when any inventoried guest lacks that metric. Reviewed disk allocations/budgets remain inventory references during API outages. With the 30-second scrape, detection also waits for the next one-minute rule evaluation. If the scrape interval changes, review the 90-second limit in both rules and dashboard health query.
 
@@ -422,7 +423,7 @@ docker compose exec prometheus promtool check config /etc/prometheus/prometheus.
 docker compose kill -s SIGHUP prometheus
 ```
 
-Only reload after both validations pass. The new scrape's catalogue labels supply group, host and owner context. This catches failed API/exporter scrapes; it does not detect a token that silently sees too few guests. Inventory comparison and the dashboard's missing/unmapped panels cover that limitation.
+Only reload after both validations pass. The new scrape's catalogue labels supply service, host and owner context. This catches failed API/exporter scrapes; it does not detect a token that silently sees too few guests. Inventory comparison and the dashboard's missing/unmapped panels cover that limitation.
 
 **Check:** the existing rule is still listed without errors. On a home/test installation, stop/start only `pve-exporter` and confirm the alert reaches Pending/Firing/Resolved as appropriate. Do not interrupt the school collector just to demonstrate this recipe.
 

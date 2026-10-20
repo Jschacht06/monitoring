@@ -14,6 +14,8 @@ Every configured check must match one successful fresh series. A failed check, m
 
 **Down means availability cannot currently be confirmed.** The required two-state public view combines destination failures and monitoring uncertainty. Internal Grafana still distinguishes Down and Unknown. Alertmanager silences do not change this page; a silenced outage remains Down. Slow but successful checks remain Up. Updates include the scrape interval plus up to 30 seconds of polling and up to 30 seconds until browser refresh. Source sample freshness and local cache expiry are separate limits, not an instantaneous failure detector.
 
+The container pins `python:3.14.8-slim-trixie` (Python patch release and Debian variant). The tag is not an immutable digest; review future patch/security updates explicitly and rebuild/retest. See the [official Python image tags](https://hub.docker.com/_/python).
+
 The runtime uses Python's standard library, with no external web assets, analytics or browser scripts. It runs without root, with a read-only container filesystem and configuration mount. Its Docker build context excludes the private mapping and tests. Requests and source exceptions are not logged with private content. The small HTTP server is an origin behind a managed reverse proxy; that proxy handles public TLS, connection/rate limits and request size limits.
 
 ## 1. Preserve the running setup
@@ -179,6 +181,51 @@ Use a temporary lab check or a service you are authorized to interrupt. Add that
 To test source unavailability without stopping shared Prometheus, temporarily set status-page's PROMETHEUS_URL in compose.yaml to http://127.0.0.1:1, recreate **only status-page**, and verify Down. Then restore http://prometheus:9090 and recreate it again. Existing Grafana and alerts continue using their own source connection. For stale source data, stop only a temporary lab scrape and verify the page no longer stays Up after the sample and snapshot limits; record the actual timing.
 
 For each live test retain date, tester, expected/actual result and a screenshot or sanitized response. Record public-route inspection from outside the management network once the approved route exists. The healthy-baseline row is verified as recorded above; the remaining live tests are pending until their evidence is collected.
+
+### Controlled stop/start rehearsal
+
+Use a disposable HTTP destination so the failed probe is real and shared services remain available. The operator must select the Docker network shared by Blackbox and the temporary destination. Run on the monitoring VM from the stack directory; keep target/mapping backups outside the discovery folder and public repository.
+
+1. Set the actual shared network name and start the temporary destination:
+
+~~~bash
+LAB_NETWORK='<shared-compose-network>'
+docker run -d --name status-acceptance --network "$LAB_NETWORK" --workdir /tmp python:3.14.8-slim-trixie python -m http.server 8000
+~~~
+
+2. Add a new temporary target file such as `prometheus/targets/status-acceptance.yml`, preserving existing files:
+
+~~~yaml
+- targets: ['http://status-acceptance:8000/']
+  labels:
+    module: http_2xx
+    service: status-acceptance
+    host: status-acceptance
+    owner: lab-operator
+    contact: lab-operator
+    dependencies: external:docker
+~~~
+
+3. Add a separate service object to the private mapping’s existing services array, validate the mapping as in step 3 and recreate only status-page:
+
+~~~json
+{
+  "name": "Temporary lab check",
+  "checks": [{
+    "service": "status-acceptance",
+    "host": "status-acceptance",
+    "module": "http_2xx",
+    "instance": "http://status-acceptance:8000/"
+  }]
+}
+~~~
+
+4. Wait for file discovery, a fresh probe and a collector poll. Confirm the temporary row is Up in both the page and /api/status. In the private Prometheus view, inspect probe_success and up with job="blackbox", service="status-acceptance". Record timestamps and baseline evidence.
+5. Run `docker stop status-acceptance`. Confirm probe_success becomes 0 while up remains 1, then the page and API show Down. Leave the browser open to check its automatic refresh. Allow up to one scrape interval plus 30 seconds for polling and 30 seconds for browser refresh (about 90 seconds with 30-second scrapes); record actual delay and investigate if it exceeds this.
+6. Run `docker start status-acceptance`. Confirm fresh probe_success=1 and up=1, then page/API return to Up. Record actual recovery delay. Inspect page source, API, stylesheet and error responses for private labels as in step 4.
+7. Restore the previous private mapping, validate and recreate only status-page. Remove only the temporary target file, then run `docker rm -f status-acceptance`. Verify the original public rows still match their internal checks and the temporary row is gone.
+
+This is a prepared operator procedure, not completed live evidence. Record date/tester, Up → Down → Up timestamps, internal comparison and sanitized screenshots/responses. The external HTTPS route still needs the separate publication checks below.
 
 ## 6. Publish through the approved route
 

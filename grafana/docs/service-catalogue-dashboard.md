@@ -1,5 +1,7 @@
 # Service catalogue dashboard
 
+**Schema update — 20 October 2026:** the catalogue uses `service`, `host`, `owner`, `contact` and `dependencies`; `group` is no longer required. For an existing imported dashboard, back up its export and update all four panel queries, descriptions and field transformations from the current template, preserving its dashboard identity and datasource mapping. Updating the repository alone does not change saved Grafana dashboards. Verify the inventory and missing-metadata panels after importing/updating.
+
 This guide continues from [step 7 of service-catalogue.md](service-catalogue.md#7-create-or-reuse-the-catalogue-dashboard). Complete the target labels and Prometheus data source first. Grafana is available at `http://<noc-core-ip>:3000`, and the source uses `http://prometheus:9090`.
 
 **Scope and compatibility:** this is a manually imported **Classic** Grafana dashboard JSON definition with `schemaVersion: 39`. That number describes the dashboard schema, not the required Grafana product version. Grafana can migrate older dashboard definitions; confirm the import and all panels in the recipient's installed version before accepting the setup. Menu wording can vary. The catalogue queries were reviewed against official documentation on 14 October 2026; the live import, actual stack configuration and installed versions still require the checks below. See [Grafana's dashboard models](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/view-dashboard-json-model/) and [dashboard migration implementation](https://github.com/grafana/grafana/blob/main/public/app/features/dashboard/state/DashboardMigrator.ts).
@@ -11,7 +13,7 @@ If you do not have a catalogue dashboard yet, first create its definition using 
 | Position | Panel | Visualisation | Why it is there |
 |---|---|---|---|
 | Top | Current service probe status | Table | Current destination probes with Up/Down/Unknown text and green/red/grey status cells. |
-| Second | Every monitored service | Table | Current scrape inventory grouped by all six catalogue labels. |
+| Second | Every monitored service | Table | Current scrape inventory grouped by all five catalogue labels. |
 | Third | Services with incomplete catalogue metadata | Stat | Counts affected identity-label tuples. Green at 0, red above 0; missing identity labels can merge unrelated services. |
 | Bottom | Services missing catalogue metadata | Table | Lists the affected service instances and how many of their checks need metadata. |
 
@@ -108,7 +110,6 @@ In the **Every monitored service** panel, find `renameByName` under `transformat
 
 ```json
 "renameByName": {
-  "group": "Group",
   "service": "Service",
   "host": "Host",
   "owner": "Owner",
@@ -125,7 +126,7 @@ The keys on the left identify the fields returned by the query. Keep those keys 
 Each panel stores its query in an `expr` field inside its `targets` array. The catalogue panel contains:
 
 ```json
-"expr": "count by (group, service, host, owner, contact, dependencies) (up)",
+"expr": "count by (service, host, owner, contact, dependencies) (up)",
 "format": "table",
 "instant": true,
 "range": false,
@@ -191,12 +192,12 @@ Create a panel with **Add new element → Panel → Configure visualization**, c
 ```promql
 (
   probe_success{job="blackbox"}
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox"} == 1)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox"}) < $probe_freshness_s)
-  and on(job,instance,module,group,service,host,owner,contact,dependencies)
+  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job="blackbox"} == 1)
+  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox"}) < $probe_freshness_s)
+  and on(job,instance,module,service,host,owner,contact,dependencies)
   (time() - timestamp(probe_success{job="blackbox"}) < $probe_freshness_s)
 )
-or on(job,instance,module,group,service,host,owner,contact,dependencies)
+or on(job,instance,module,service,host,owner,contact,dependencies)
 (-1 + 0 * up{job="blackbox"})
 ```
 
@@ -205,8 +206,8 @@ or on(job,instance,module,group,service,host,owner,contact,dependencies)
 | Title | Current service probe status |
 | Query | Instant; Format Table |
 | Transformation | Organize fields by name; hide Time, job and __name__ if present |
-| Column order | group, service, host, module, instance, owner, contact, dependencies, Value |
-| Display names | Group, Service, Host, Check, Target, Owner, Contact, Dependencies, Status |
+| Column order | service, host, module, instance, owner, contact, dependencies, Value |
+| Display names | Service, Host, Check, Target, Owner, Contact, Dependencies, Status |
 | Override | Fields with name: Status |
 | Value mappings on Status | 1 → Up/green; 0 → Down/red; -1 → Unknown/grey; null → Unknown/grey |
 | Status cell type | Colored background; colour only the status cell |
@@ -217,7 +218,7 @@ All these properties are already stored in the imported template, including the 
 ### Every monitored service
 
 ```promql
-count by (group, service, host, owner, contact, dependencies) (up)
+count by (service, host, owner, contact, dependencies) (up)
 ```
 
 | Setting | Value |
@@ -227,17 +228,17 @@ count by (group, service, host, owner, contact, dependencies) (up)
 | Query format | Table |
 | Query type | Instant |
 | Transformation | Organize fields by name |
-| Fields | Hide Time; order group, service, host, owner, contact, dependencies, Value |
-| Display names | Group, Service, Host, Owner, Contact person, Dependencies, Checks |
+| Fields | Hide Time; order service, host, owner, contact, dependencies, Value |
+| Display names | Service, Host, Owner, Contact person, Dependencies, Checks |
 
-The query groups checks by all six catalogue labels. **Checks** counts current `up` series, including a scrape whose `up` value is 0. All checks for the same service must have complete, matching catalogue metadata to produce one service row. Newly discovered targets need a first scrape; removed targets disappear after discovery/staleness processing. See [Prometheus scrape-target series](https://prometheus.io/docs/concepts/jobs_instances/).
+The query groups checks by all five catalogue labels. **Checks** counts current `up` series, including a scrape whose `up` value is 0. All checks for the same service must have complete, matching catalogue metadata to produce one service row. Newly discovered targets need a first scrape; removed targets disappear after discovery/staleness processing. See [Prometheus scrape-target series](https://prometheus.io/docs/concepts/jobs_instances/).
 
 ### Services with incomplete catalogue metadata
 
 ```promql
 count(
-  count by (group, service, host) (
-    up{group=""} or up{service=""} or up{host=""}
+  count by (service, host) (
+    up{service=""} or up{host=""}
     or up{owner=""} or up{contact=""} or up{dependencies=""}
   )
 )
@@ -256,15 +257,15 @@ or (0 * count(up))
 | Colour mode | Background |
 | Thresholds | Absolute; base green, 1 red |
 
-The inner query groups incomplete checks by `(group, service, host)`; the outer `count` counts those label tuples. Two incomplete checks with the same identity contribute **1**, even if several labels are missing. When identity labels are absent, unrelated checks can merge into one partial/blank tuple, so this can undercount real affected services. Correct missing identity labels before interpreting it as a service count.
+The inner query groups incomplete checks by `(service, host)`; the outer `count` counts those label tuples. Two incomplete checks with the same identity contribute **1**, even if several labels are missing. When identity labels are absent, unrelated checks can merge into one partial/blank tuple, so this can undercount real affected services. Correct missing identity labels before interpreting it as a service count.
 
 The fallback supplies 0 when current targets exist and all required labels are present. An empty inventory produces no data rather than a successful zero. Placeholder text, whitespace-only labels and incorrect contact details still need manual review. See [Prometheus aggregation and set operators](https://prometheus.io/docs/prometheus/latest/querying/operators/#aggregation-operators) and [empty-label matching](https://prometheus.io/docs/prometheus/latest/querying/basics/#instant-vector-selectors).
 
 ### Services missing catalogue metadata
 
 ```promql
-count by (group, service, host) (
-  up{group=""} or up{service=""} or up{host=""}
+count by (service, host) (
+  up{service=""} or up{host=""}
   or up{owner=""} or up{contact=""} or up{dependencies=""}
 )
 ```
@@ -276,8 +277,8 @@ count by (group, service, host) (
 | Query format | Table |
 | Query type | Instant |
 | Transformation | Organize fields by name |
-| Fields | Hide Time; order group, service, host, Value |
-| Display names | Group, Service, Host, Checks missing metadata |
+| Fields | Hide Time; order service, host, Value |
+| Display names | Service, Host, Checks missing metadata |
 
 This table uses the same missing-label filter and grouping as the counter. It has one row per affected identity-label tuple; **Checks missing metadata** counts its incomplete checks, including scrapes with `up=0`. A check missing several labels is included once by the set union. Once identity labels are complete, each tuple represents one service instance.
 
@@ -386,7 +387,7 @@ Grafana applies the highest applicable permission. See [dashboard and folder per
 1. Open an Incognito/InPrivate browser window so the administrator's login cookie is not reused.
 2. Open the same Grafana address and sign in as the operator. Check the profile identifies the operator.
 3. Open **Service list** and confirm the current status, inventory and metadata panels load with data.
-4. Open **Service health**. Select one Group and one Service, confirm the panels follow the selection, then restore All.
+4. Open **Service health**. Select one Service, confirm the probe panels follow the selection, then restore All. Check Disk host separately for the SMART table.
 5. Change the time range to Last 15 minutes, then Last 6 hours, and use Refresh. These viewing actions must work without granting edit access.
 6. Open any intended dashboard-navigation links and confirm they reach the expected view. Empty long-term history on a new installation is separate from a permission failure.
 
@@ -494,7 +495,7 @@ Compare the original and restored dashboards at the same filters/time range:
 | Health table/history | Current status and historical outages agree |
 | Latency/availability/coverage | Values and units agree; no missing-source/query errors |
 | Certificate table | Expected HTTPS entries appear; HTTP-only probes have no certificate metrics |
-| Filters | Group and Service selection update the intended panels |
+| Filters | Service and Disk host selections update their intended panels |
 | Dashboard links, if configured | Navigate to the intended restored dashboard on port 3001 |
 
 Matching UIDs preserve relative dashboard links. Absolute links containing port 3000 can still lead back to the original Grafana; adapt deployment-specific links only in the test copy where needed and record the change. Do not add homelab addresses to reusable templates.

@@ -31,16 +31,16 @@ Before configuring school targets, record an intake with at least three project 
 
 | Record per service | What to agree |
 |---|---|
-| Identity | Project group, service name and stable host identity |
+| Identity | Service name and stable host identity; record the project team in the intake |
 | Responsibility | Owner, real contact role/channel and escalation contact |
-| Dependencies | Monitored service IDs as group/service@host; otherwise external:name |
+| Dependencies | Monitored service IDs as service@host; otherwise external:name |
 | Reachability | Permitted URL/port/protocol and the network location of the probe |
 | Application health | Endpoint and expected status/body or function, approved by the owner |
 | SLI and threshold | What is measured, acceptable response time and agreed detection/notification time |
 | Maintenance | Timezone, planned window, owner and existing silence procedure |
 | Access | Approval for probes and any optional host/agent/API metrics; least-privilege credentials |
 
-Use the same identity and metadata on every check for one service. Keep maintenance and SLI explanations in the intake record rather than long metric labels. A success count alone cannot detect a service that was never configured; reconcile the target list against this agreement.
+Use the same identity and metadata on every check for one service. The project team can be recorded as `owner`; target labels do not require a `group`. Keep maintenance and SLI explanations in the intake record rather than long metric labels. A success count alone cannot detect a service that was never configured; reconcile the target list against this agreement.
 
 ## 1. Prerequisites
 
@@ -85,7 +85,7 @@ Verify the active `blackbox` job in `prometheus/prometheus.yml` before adding ta
         replacement: blackbox:9115
 ```
 
-This requires the host `prometheus` folder to be mounted at `/etc/prometheus` in the Prometheus container. Keep existing rules, other jobs and any intentional additional relabeling. Every module referenced by an enabled target must exist in the active `blackbox/blackbox.yml`. Reuse `http_2xx` for ordinary HTTP checks and `tcp_connect` for TCP. ICMP is optional and requires its own configured module; the current tracked Blackbox configuration does not define `icmp`. An unknown module makes the probe scrape fail even when the destination works. A module name is a local recipe name; its behavior depends on that recipe. The supplied reference describes HTTP/TCP/ICMP probers with 5-second timeouts, leaving time within the 10-second scrape timeout. See [the Blackbox exporter scrape pattern](https://github.com/prometheus/blackbox_exporter#prometheus-configuration) and [file discovery configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
+This requires the host `prometheus` folder to be mounted at `/etc/prometheus` in the Prometheus container. Keep existing rules, other jobs and any intentional additional relabeling. Every module referenced by an enabled target must exist in the active `blackbox/blackbox.yml`. Reuse `http_2xx` for ordinary HTTP checks and `tcp_connect` for TCP. An unknown module makes the probe scrape fail even when the destination works. A module name is a local recipe name; its behavior depends on that recipe. The supplied reference describes HTTP and TCP probers with 5-second timeouts, leaving time within the 10-second scrape timeout. See [the Blackbox exporter scrape pattern](https://github.com/prometheus/blackbox_exporter#prometheus-configuration) and [file discovery configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
 
 If you change the main job, validate and reload it as in steps 4–5. File discovery only applies automatically when this job is active and can read the matching files.
 
@@ -93,19 +93,18 @@ If you change the main job, validate and reload it as in steps 4–5. File disco
 
 ## 2. Add the first targets and their catalogue labels
 
-A catalogue entry starts with the labels on a monitored target. `group`, `service` and `host` define the service identity used by this package. Add three more labels: `owner`, `contact` and `dependencies`. Two independent applications on the same host need distinct `service` values. Several checks of one application use the same identity labels and exactly the same metadata.
+A catalogue entry starts with the labels on a monitored target. `service` and `host` define the service identity used by this package. Add three more labels: `owner`, `contact` and `dependencies`. Two independent applications on the same host need distinct `service` values. Several checks of one application use the same identity labels and exactly the same metadata.
 
 | Label | What it does | Where it is used |
 |---|---|---|
-| `group` | Owning group or team, for example `noc` or `group-a` | Catalogue column and filters; alert use depends on the active rules |
 | `service` | Service name, for example `grafana`, `wiki` or `ssh` | Catalogue column; alert use depends on the active rules |
-| `host` | Stable machine identity for this service | Catalogue column; keep identical values across checks on one machine when active alert grouping/inhibition uses `host` |
+| `host` | Stable machine identity for this service | Catalogue column; keep identical values across checks on one machine when active alert grouping uses `host` |
 | `owner` | Responsible team or person | Owner column |
 | `contact` | Named person and contact channel | Contact person column |
 | `dependencies` | Services or infrastructure this service requires | Dependencies column |
-| `module` | Existing probe type: `http_2xx`, `tcp_connect` or `icmp` | Selects the Blackbox probe; not part of the service identity |
+| `module` | Existing probe type: `http_2xx`, `http_2xx_insecure`, `http_grafana_health` or `tcp_connect` | Selects the Blackbox probe; not part of the service identity |
 
-This guide's dependency notation is `group/service@host`; it is a readable-text convention, not built-in Grafana dependency resolution. For infrastructure that is not monitored, use `external:<name>`. Separate several values with `; `, for example `external:docker; noc/prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record. Record `noc/prometheus@noc-core` for Grafana only if it is the dependency you intend to describe (for example this dashboard's data source); Grafana's own process/database health does not inherently depend on Prometheus.
+This guide's dependency notation is `service@host`; it is a readable-text convention, not built-in Grafana dependency resolution. For infrastructure that is not monitored, use `external:<name>`. Separate several values with `; `, for example `external:docker; prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record. Record `prometheus@noc-core` for Grafana only if it is the dependency you intend to describe (for example this dashboard's data source); Grafana's own process/database health does not inherently depend on Prometheus.
 
 Why: a contact and dependency list tells the person reading the dashboard whom to call and what else to check. These labels document relationships; they do not automatically change alert routing or mute alerts.
 
@@ -130,7 +129,6 @@ Replace the placeholders below before saving:
     - http://prometheus:9090/-/ready
   labels:
     module: http_2xx
-    group: noc
     service: prometheus
     host: noc-core
     owner: '<owner>'
@@ -141,17 +139,16 @@ Replace the placeholders below before saving:
     - http://grafana:3000/api/health
   labels:
     module: http_2xx
-    group: noc
     service: grafana
     host: noc-core
     owner: '<owner>'
     contact: '<contact-person> (<contact-address>)'
-    dependencies: 'external:docker; noc/prometheus@noc-core'
+    dependencies: 'external:docker; prometheus@noc-core'
 ```
 
 If you already followed setup.md, its `noc.yml` puts both endpoints in one `noc-selftest` block. Replace that block with the two above. They are separate services and should become separate catalogue rows. If the self-checks are already in another target file, update that file instead of adding duplicate probes.
 
-Keep `noc` and `noc-core` consistent with the existing internal target labels. The URLs use Compose service names because Blackbox probes them over the Docker network. Your browser still uses the LXC IP. These names resolve when the containers share the relevant [Compose network](https://docs.docker.com/compose/how-tos/networking/).
+Keep `noc-core` consistent with the existing internal targets’ `host` label. The URLs use Compose service names because Blackbox probes them over the Docker network. Your browser still uses the LXC IP. These names resolve when the containers share the relevant [Compose network](https://docs.docker.com/compose/how-tos/networking/).
 
 The Prometheus example uses `/-/ready`: it returns success when Prometheus can serve queries. `/-/healthy`, used in the supporting setup example, is a liveness endpoint that always returns HTTP 200 while the server can answer it; it does not test readiness. Choose the endpoint matching your check's purpose. Grafana's `/api/health` checks the Grafana API/database health response; it does not test every configured data source. See [Prometheus management endpoints](https://prometheus.io/docs/prometheus/latest/management_api/) and [Grafana health API](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/other/#health-api).
 
@@ -160,7 +157,7 @@ Real target files are ignored by Git, as explained in [adding-targets.md](../../
 **Check:** in Grafana *Explore* or the Prometheus query box, run:
 
 ```promql
-probe_success{group="noc", service=~"prometheus|grafana"}
+probe_success{job="blackbox",service=~"prometheus|grafana",host="noc-core"}
 ```
 
 After discovery and a few scrape cycles, both targets should return `1` when their selected health endpoints pass. Expand a result and check that the owner, contact and dependencies are present. Target-file edits need no Prometheus restart with the active file-discovery job verified above. Keep credentials out of endpoint URLs and label values: labels are stored with metrics and displayed in the catalogue.
@@ -176,7 +173,7 @@ cp prometheus/targets/template.yml prometheus/targets/group-a.yml
 nano prometheus/targets/group-a.yml
 ```
 
-Only copy the template when creating a new file. Edit an existing file directly so its targets are preserved. Replace the commented examples with populated blocks. Each service needs its real endpoint and all six catalogue labels.
+Only copy the template when creating a new file. Edit an existing file directly so its targets are preserved. Replace the commented examples with populated blocks. Each service needs its real endpoint and all five catalogue labels.
 
 ### Web service
 
@@ -185,7 +182,6 @@ Only copy the template when creating a new file. Edit an existing file directly 
     - http://<school-host>:8080/health
   labels:
     module: http_2xx
-    group: group-a
     service: wiki
     host: '<school-host>'
     owner: '<owner>'
@@ -202,7 +198,6 @@ Use the service's actual port and path. For HTTPS, use `https://` and the correc
     - '<school-host>:22'
   labels:
     module: tcp_connect
-    group: group-a
     service: ssh
     host: '<school-host>'
     owner: '<owner>'
@@ -238,31 +233,12 @@ docker compose exec blackbox blackbox_exporter --config.check --config.file=/etc
 
 Only after validation succeeds, apply the change using the [existing operations procedure](../../docs/operations-and-troubleshooting.md#how-to-apply-a-change). Target-file-only changes need no restart. The [HTTPS test and IPv4 routing fix](../../docs/adding-targets.md#temporary-public-https-test) remain in the target guide; do not disable TLS verification just to work around a routing fault.
 
-### Host with ICMP
-
-```yaml
-- targets:
-    - '<school-host>'
-  labels:
-    module: icmp
-    group: group-a
-    service: ping
-    host: '<school-host>'
-    owner: '<owner>'
-    contact: '<contact-person> (<contact-address>)'
-    dependencies: '<dependencies>'
-```
-
-> **Only add ICMP for hosts that reliably answer ping and have a configured ICMP module.** If the loaded Alertmanager configuration includes ICMP/HTTP inhibition, it can suppress HTTP ServiceDown alerts while the same host's ICMP ServiceDown alert is firing. Check the active rule and ping result before relying on it. See [multiple checks for one machine](../../docs/adding-targets.md#several-checks-for-one-machine).
-
-That inhibition behavior is described by the supplied reference; it depends on the Alertmanager configuration actually loaded. ICMP also needs appropriate privileges in the exporter environment. On Linux this can be an allowed ping group, `CAP_NET_RAW` or root; nested LXC/container restrictions can still prevent probing. Confirm an ICMP result of `1` before using it for inhibition. See [Blackbox ICMP permissions](https://github.com/prometheus/blackbox_exporter#permissions).
-
 Probes run from Blackbox, so the endpoints must be reachable from the monitoring LXC. `localhost` in a probe target means Blackbox itself.
 
 **Check:**
 
 ```promql
-probe_success{group="group-a"}
+probe_success{job="blackbox",host="<school-host>",service=~"wiki|ssh"}
 ```
 
 Every configured probe should appear with its labels. `1` means the destination check passed; `0` means it failed. Confirm that every service on the intended school-service list has a target, not just that the targets you added work.
@@ -287,7 +263,6 @@ Apply the examples below as label updates to your existing `static_configs` entr
       - targets:
           - localhost:9090
         labels:
-          group: noc
           service: prometheus
           host: noc-core
           owner: '<owner>'
@@ -298,7 +273,6 @@ Apply the examples below as label updates to your existing `static_configs` entr
     static_configs:
       - targets: ['node-exporter:9100']
         labels:
-          group: noc
           service: node-exporter
           host: noc-core
           owner: '<owner>'
@@ -314,14 +288,13 @@ For another host's Node Exporter, add the same catalogue labels to its static ta
 
 ### Optional drive-health exporter
 
-If you enabled the Prometheus template's optional `smartctl` job, add all six catalogue labels to each of its existing static target entries as well. Its `up` series is included in the same dashboard completeness check. Keep the exporter address and its existing `host` and `group` values, and add the missing fields:
+If you enabled the Prometheus template's optional `smartctl` job, add all five catalogue labels to each of its existing static target entries as well. Its `up` series is included in the same dashboard completeness check. Keep the exporter address and its existing `host` value, and add the missing fields:
 
 ```yaml
   - job_name: smartctl
     static_configs:
       - targets: ['<school-host>:9633']
         labels:
-          group: noc
           service: smartctl-exporter
           host: '<school-host>'
           owner: '<owner>'
@@ -337,7 +310,6 @@ If `job="pve"` is enabled, its scrape is also included in this catalogue. Add th
 
 ```yaml
         labels:
-          group: noc
           service: pve-exporter
           host: '<existing-proxmox-host-label>'
           owner: '<owner>'
@@ -345,9 +317,9 @@ If `job="pve"` is enabled, its scrape is also included in this catalogue. Add th
           dependencies: 'external:docker; external:proxmox-api'
 ```
 
-Keep the actual `group` and `host` values already used by that job, and replace the other placeholders. This row describes the API collection check, not one row for every VM/LXC returned by the exporter. No new exporter or second `pve` job is needed just to add catalogue metadata. The supporting [Proxmox exporter guide](../../docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter) describes its existing integration; Smith guest resource data is handled separately in [smith-resource-metrics.md](smith-resource-metrics.md).
+Keep the actual `host` value already used by that job, and replace the other placeholders. This row describes the API collection check, not one row for every VM/LXC returned by the exporter. No new exporter or second `pve` job is needed just to add catalogue metadata. The supporting [Proxmox exporter guide](../../docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter) describes its existing integration; Smith guest resource data is handled separately in [smith-resource-metrics.md](smith-resource-metrics.md).
 
-Apply all six catalogue labels to every other enabled scrape job too, including any direct scrape of an exporter's own `/metrics` endpoint. The dashboard intentionally uses all current `up` series; adding a new integration can therefore reveal incomplete metadata.
+Apply all five catalogue labels to every other enabled scrape job too, including any direct scrape of an exporter's own `/metrics` endpoint. The dashboard intentionally uses all current `up` series; adding a new integration can therefore reveal incomplete metadata.
 
 **Check:**
 
@@ -376,7 +348,7 @@ docker compose logs --since 2m prometheus
 up
 ```
 
-Every target should now carry `group`, `service`, `host`, `owner`, `contact` and `dependencies`. Check the logs and *Status → Target health* for discovery errors too; main-config validation alone does not prove every target file loaded. Check `prometheus_config_last_reload_successful` is `1` and `prometheus_config_last_reload_success_timestamp_seconds` advanced after your command; the signal command itself does not prove the new configuration was accepted. These metrics are defined in the [Prometheus server source](https://github.com/prometheus/prometheus/blob/main/cmd/prometheus/main.go).
+Every target should now carry `service`, `host`, `owner`, `contact` and `dependencies`. Check the logs and *Status → Target health* for discovery errors too; main-config validation alone does not prove every target file loaded. Check `prometheus_config_last_reload_successful` is `1` and `prometheus_config_last_reload_success_timestamp_seconds` advanced after your command; the signal command itself does not prove the new configuration was accepted. These metrics are defined in the [Prometheus server source](https://github.com/prometheus/prometheus/blob/main/cmd/prometheus/main.go).
 
 ---
 
@@ -411,12 +383,12 @@ The same guide also explains how to create the panels manually in Grafana and ex
 
 | Panel | What it shows | Expected result |
 |---|---|---|
-| Current service probe status | Group, service, host, check, target, owner, contact, dependencies and Up/Down/Unknown status | One row per configured destination probe; healthy checks are green |
-| Every monitored service | Group, service, host, owner, contact person, dependencies and check count | One row per service instance |
+| Current service probe status | Service, host, check, target, owner, contact, dependencies and Up/Down/Unknown status | One row per configured destination probe; healthy checks are green |
+| Every monitored service | Service, host, owner, contact person, dependencies and check count | One row per service instance |
 | Services with incomplete catalogue metadata | Number of service instances with at least one incomplete check | `0` after the labels are complete |
 | Services missing catalogue metadata | Affected service instances and their incomplete-check counts | One row per affected service; empty when the counter is 0 |
 
-With only the two NOC probes and the two original internal scrapes, the status table shows two probe rows. The inventory table should show three service rows: `prometheus` with 2 checks, `grafana` with 1, and `node-exporter` with 1. School targets add their own rows. The missing-metadata counter counts each affected `(group, service, host)` once, and its value matches the number of rows in the bottom table. An empty bottom table is expected when all labels are complete.
+With only the two NOC probes and the two original internal scrapes, the status table shows two probe rows. The inventory table should show three service rows: `prometheus` with 2 checks, `grafana` with 1, and `node-exporter` with 1. School targets add their own rows. The missing-metadata counter counts each affected `(service, host)` once, and its value matches the number of rows in the bottom table. An empty bottom table is expected when all labels are complete.
 
 ---
 
@@ -425,13 +397,13 @@ With only the two NOC probes and the two original internal scrapes, the status t
 The service table uses:
 
 ```promql
-count by (group, service, host, owner, contact, dependencies) (up)
+count by (service, host, owner, contact, dependencies) (up)
 ```
 
 | Part | What it does | Why |
 |---|---|---|
 | `up` | One series per scrape target, including a failing scrape with value 0 | Failing checks stay in the inventory while Prometheus keeps scraping them. |
-| `count by (...)` | Counts checks that share all six labels | Several checks of the same service become one row when their metadata agrees. |
+| `count by (...)` | Counts checks that share all five labels | Several checks of the same service become one row when their metadata agrees. |
 | Checks column | The resulting count | It counts current `up` series, including failures; it does not count healthy checks or services absent from discovery. |
 
 `up` is generated for each scrape target; see [Prometheus jobs and instances](https://prometheus.io/docs/concepts/jobs_instances/). A newly discovered target may not appear until its first scrape. Removed targets leave current results after discovery/staleness processing. A row is not proof that a service has been configured in every intended environment.
@@ -446,12 +418,12 @@ If you build or adjust the table manually, use these [query options](https://gra
 | Query format | Table | Returns tabular results |
 | Query type | Instant | One current result per series, not one row per scrape time |
 | Transformation | Organize fields by name | Hide Time, rename fields and put the columns in order |
-| Columns | Group, Service, Host, Owner, Contact person, Dependencies, Checks | The required catalogue information |
+| Columns | Service, Host, Owner, Contact person, Dependencies, Checks | The required catalogue information |
 | Refresh | 30s | Matches the scrape interval |
 
 The template applies these settings. If your Grafana generates a different numeric field name, rename that field to **Checks**.
 
-**Check:** after all identity labels are complete and metadata agrees, the table has one row per `(group, service, host)`. Until then it has one row per distinct combination of all six labels, so conflicting metadata can split a service into multiple rows. Contact and dependency text is readable, and changing the range while keeping its end at now does not produce a row for every scrape. An Instant query evaluates at the selected range's end; an end in the past shows the catalogue at that time.
+**Check:** after all identity labels are complete and metadata agrees, the table has one row per `(service, host)`. Until then it has one row per distinct combination of all five labels, so conflicting metadata can split a service into multiple rows. Contact and dependency text is readable, and changing the range while keeping its end at now does not produce a row for every scrape. An Instant query evaluates at the selected range's end; an end in the past shows the catalogue at that time.
 
 ---
 
@@ -462,19 +434,19 @@ The template applies these settings. If your Grafana generates a different numer
 In Explore, run:
 
 ```promql
-up{group=""} or up{service=""} or up{host=""}
+up{service=""} or up{host=""}
 or up{owner=""} or up{contact=""} or up{dependencies=""}
 ```
 
 **Check:** no results. An empty matcher also finds a label that is absent, as specified in [Prometheus label matching](https://prometheus.io/docs/prometheus/latest/querying/basics/#instant-vector-selectors). Review the text manually too: whitespace, placeholders such as `<owner>` and incorrect dependency/contact values are present labels but unfinished entries.
 
-Fix missing `group`, `service` or `host` before interpreting the counter as a number of services. Without complete identity labels, unrelated checks can collapse into the same partial/blank tuple. The red counter still flags incomplete metadata, but it can undercount the real affected services. Inspect individual `job`, `instance` and `module` labels in Explore to identify each unfinished check. The bottom table and counter agree on tuples; that agreement alone does not prove identity completeness.
+Fix missing `service` or `host` before interpreting the counter as a number of services. Without complete identity labels, unrelated checks can collapse into the same partial/blank tuple. The red counter still flags incomplete metadata, but it can undercount the real affected services. Inspect individual `job`, `instance` and `module` labels in Explore to identify each unfinished check. The bottom table and counter agree on tuples; that agreement alone does not prove identity completeness.
 
 ### Conflicting metadata
 
 ```promql
-count by (group, service, host) (
-  count by (group, service, host, owner, contact, dependencies) (up)
+count by (service, host) (
+  count by (service, host, owner, contact, dependencies) (up)
 ) > 1
 ```
 
@@ -524,7 +496,7 @@ Record the actual check results with the evidence:
 |---|---|---|
 | Add a service | Add a complete block in `prometheus/targets/<group>.yml` | No restart; file_sd discovers it |
 | Change owner, contact or dependencies | Change the labels on every check for that service | Target files: automatic. Static jobs in `prometheus.yml`: validate and reload. |
-| Add a second check for a service | Keep all six catalogue labels identical; change endpoint/module as needed | Automatic discovery; the Checks count increases |
+| Add a second check for a service | Keep all five catalogue labels identical; change endpoint/module as needed | Automatic discovery; the Checks count increases |
 | Remove a check | Delete its block | Automatic discovery; use `[]` if the file should remain with no targets |
 | Change table layout | Edit the Grafana panel and save the dashboard | Immediate in the UI |
 | Reuse the dashboard | Export/import its JSON and choose the destination source | No container restart |
@@ -538,7 +510,7 @@ Changes to metadata create new time series, because labels are part of a series'
 | New service does not appear | File does not match `targets/*.yml`, YAML is invalid, or discovery has not completed | Check filename and logs: `docker compose logs --since 5m prometheus`. Verify the active target list. |
 | Probe is listed but fails | Wrong endpoint/module, destination issue or network access | Check `probe_success` and follow [adding-targets.md](../../docs/adding-targets.md#after-saving). |
 | Missing-metadata count is greater than 0 | At least one probe/static target lacks a required label | Run the missing-label query from step 9 and complete that target's labels. |
-| Same service appears twice | Owner/contact/dependencies differ between its checks | Run the conflict query and align all six labels. |
+| Same service appears twice | Owner/contact/dependencies differ between its checks | Run the conflict query and align all five labels. |
 | Lots of rows for the same check | Query is Range or Both instead of Instant | Set Type to Instant and Format to Table. |
 | Checks is 2 for Prometheus | It has a self-scrape and a health probe | Expected; both belong to one service row. |
 | Static labels still show the old values | Main configuration was not loaded again | Validate and send SIGHUP as in step 5. |
@@ -559,5 +531,5 @@ Next steps:
 
 - [service-catalogue-dashboard.md](service-catalogue-dashboard.md): create, edit, export and import the dashboard
 - [dashboard-template.json](../dashboard-template.json): ready-made dashboard definition to copy and customise
-- [adding-targets.md](../../docs/adding-targets.md): probe formats, diagnosis and ICMP/HTTP inhibition
+- [adding-targets.md](../../docs/adding-targets.md): HTTP/TCP probe formats and diagnosis
 - [operations-and-troubleshooting.md](../../docs/operations-and-troubleshooting.md): stack operations and applying configuration changes

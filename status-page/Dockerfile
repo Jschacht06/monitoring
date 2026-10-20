@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.14.8-slim-trixie
 WORKDIR /app
 COPY server.py style.css ./
 USER 65534:65534
