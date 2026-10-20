@@ -59,7 +59,7 @@ Use consistent lowercase IDs for `service` and `host`, with dashes where appropr
 
 Write monitored dependencies as `service@host`, and unmonitored infrastructure as `external:<name>`. Separate several entries with `; `, for example `external:docker; prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record. Keep the dependency list as one quoted string, not a YAML list.
 
-Checks for the same service on the same machine must share `service`, `host`, `owner`, `contact` and `dependencies` so they become one row. The health dashboard shows each check as `service · host · module`, so two checks with the same service, host and module look identical there: give them different `service` values. These labels document ownership and dependencies; they do not automatically change alert routing or inhibition. See [service-catalogue.md](../grafana/docs/service-catalogue.md#2-add-the-first-targets-and-their-catalogue-labels) for the catalogue setup.
+Checks for the same service on the same machine must share `service`, `host`, `owner`, `contact` and `dependencies` so they become one row. The health dashboard's status history, successful HTTP duration, observed availability and sample coverage panels use only `service` as their displayed name (`{{service}}`). Checks that share a service name remain separate series with the same displayed name; use the **Current probe checks** table for host, module and destination details. These labels document ownership and dependencies; they do not automatically change alert routing or inhibition. See [service-catalogue.md](../grafana/docs/service-catalogue.md#2-add-the-first-targets-and-their-catalogue-labels) for the catalogue setup.
 
 ## Which probe to use
 

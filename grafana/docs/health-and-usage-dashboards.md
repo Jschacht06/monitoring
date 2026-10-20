@@ -247,10 +247,20 @@ The status-history and HTTP-duration panels use query type **Range**, format **T
 
 | Panel | Visualisation | Unit / options |
 |---|---|---|
-| Probe status history | Status history | Same 1/0/-1 mappings as the current table; legend `{{group}} / {{service}} @ {{host}} / {{module}} / {{instance}}` |
-| Successful HTTP probe duration | Time series | Seconds (`s`); min 0; legend includes service, host and target |
-| Observed probe availability | Stat (Instant query) | Percent (0–100); 2 decimals; No value Unknown |
-| Probe sample coverage | Stat (Instant query) | Percent (0–100); 1 decimal; No value Unknown |
+| Probe status history | Status history | Same 1/0/-1 mappings as the current table; legend `{{service}}` |
+| Successful HTTP probe duration | Time series | Seconds (`s`); min 0; legend `{{service}}` |
+| Observed probe availability | Stat (Instant query) | Percent (0–100); 2 decimals; No value Unknown; legend `{{service}}` |
+| Probe sample coverage | Stat (Instant query) | Percent (0–100); 1 decimal; No value Unknown; legend `{{service}}` |
+
+All four panels display only the `service` label from the Prometheus target file (for example `jellyfin`), using the query legend `{{service}}`. This changes names only: each probe remains a separate series with its original labels and query. Multiple checks or historical label changes can therefore produce repeated service names; use the group/service filters and **Current probe checks** table to inspect the host, module and destination.
+
+To update an existing dashboard without re-importing it:
+
+1. Edit each of the four panels listed above and select its Prometheus query **A**.
+2. Under the query's **Legend** option, choose **Custom** and enter `{{service}}`. In editors with a single legend text field, enter it there. Keep the PromQL expression and query type unchanged.
+3. Run the query and confirm the history row labels, duration legend and Stat names show only the service value. Return to the dashboard and save after applying all four panels.
+
+A fresh template import already contains these legends. For an edited export of an existing dashboard, preserve its UID and datasource mapping when importing it over that dashboard.
 
 For **Probe status history**, paste the complete current-check expression from step 5. Before applying or saving this panel, configure:
 
@@ -316,7 +326,7 @@ clamp_max(
 or on(job,instance,module,group,service,host,owner,contact,dependencies) (0 * up{job="blackbox",group=~"$group",service=~"$service"})
 ```
 
-Use legend `{{group}} / {{service}} @ {{host}} / {{module}} / {{instance}}` for both. `$__range` and `$__range_s` are Grafana time-range variables. Coverage uses `probe_interval_s` from step 1. The estimate is approximate at boundaries and with timing jitter and is clamped at 100%; use a range substantially longer than one scrape interval.
+Use legend `{{service}}` for both. `$__range` and `$__range_s` are Grafana time-range variables. Coverage uses `probe_interval_s` from step 1. The estimate is approximate at boundaries and with timing jitter and is clamped at 100%; use a range substantially longer than one scrape interval.
 
 Availability is the **fraction of recorded samples that succeeded**, with each sample weighted equally. Missing samples are excluded. A visible check with no samples has Unknown availability and 0% coverage. A monitoring outage can therefore leave 100% availability with poor coverage; that is inconclusive. New targets, label changes, retention and monitoring gaps lower coverage for a longer view. Historical series with samples can remain in these period summaries after the target is removed. Neither panel is a verified monthly SLO or combined service SLI. See [Prometheus over-time functions](https://prometheus.io/docs/prometheus/latest/querying/functions/#aggregation_over_time).
 

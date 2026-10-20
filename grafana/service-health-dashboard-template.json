@@ -535,7 +535,7 @@
           "format": "time_series",
           "instant": false,
           "range": true,
-          "legendFormat": "{{group}} / {{service}} @ {{host}} / {{module}} / {{instance}}"
+          "legendFormat": "{{service}}"
         }
       ],
       "fieldConfig": {
@@ -631,7 +631,7 @@
           "format": "time_series",
           "instant": false,
           "range": true,
-          "legendFormat": "{{group}} / {{service}} @ {{host}} / {{module}} / {{instance}}"
+          "legendFormat": "{{service}}"
         }
       ],
       "fieldConfig": {
@@ -721,7 +721,7 @@
           "format": "time_series",
           "instant": true,
           "range": false,
-          "legendFormat": "{{group}} / {{service}} @ {{host}} / {{module}} / {{instance}}"
+          "legendFormat": "{{service}}"
         }
       ],
       "fieldConfig": {
@@ -815,7 +815,7 @@
           "format": "time_series",
           "instant": true,
           "range": false,
-          "legendFormat": "{{group}} / {{service}} @ {{host}} / {{module}} / {{instance}}"
+          "legendFormat": "{{service}}"
         }
       ],
       "fieldConfig": {

@@ -8,8 +8,10 @@
 #
 # Labels:
 #   module        probe type, see below
-#   service       the service, e.g. wiki (the health dashboard shows service, host and module,
-#                 so two checks with the same host and module need different services)
+#   service       the service, e.g. wiki; used alone as the displayed name in the health
+#                 dashboard history, HTTP duration, availability and coverage panels.
+#                 Checks sharing this name remain separate series; inspect the current-check
+#                 table for host, module and destination details.
 #   host          readable name of the machine the service runs on (not its IP), the same for
 #                 every target on that machine
 #   owner         person or team responsible
