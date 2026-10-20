@@ -1,0 +1,37 @@
+{
+  "services": [
+    {
+      "name": "Community website",
+      "checks": [
+        {
+          "service": "<website-service-label>",
+          "host": "<website-host-label>",
+          "module": "http_2xx",
+          "instance": "http://<website-address>:<port>/<path>"
+        }
+      ]
+    },
+    {
+      "name": "Media library",
+      "checks": [
+        {
+          "service": "<media-service-label>",
+          "host": "<media-host-label>",
+          "module": "http_2xx",
+          "instance": "http://<media-address>:<port>/<path>"
+        }
+      ]
+    },
+    {
+      "name": "Service monitor",
+      "checks": [
+        {
+          "service": "<monitor-service-label>",
+          "host": "<monitor-host-label>",
+          "module": "http_2xx",
+          "instance": "http://<monitor-address>:<port>/<path>"
+        }
+      ]
+    }
+  ]
+}

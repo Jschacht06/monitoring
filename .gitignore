@@ -23,3 +23,7 @@ compose.yaml
 # Alloy: real secrets and the gateway certificate stay out of Git
 /alloy/secrets/*
 /alloy/logging-root.crt
+
+# Private public-status mapping and local Python artifacts
+/status-page/services.json
+__pycache__/

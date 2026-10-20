@@ -6,6 +6,7 @@ Guides for the noc-core monitoring stack, Grafana service catalogue, health dash
 
 | Guide | What it covers |
 |---|---|
+| [public-status-page.md](public-status-page.md) | Sanitized Up/Down page: private allowlist, Compose deployment, privacy checks, live acceptance, publication and rollback. |
 | [setup.md](setup.md) | Set up Prometheus, Grafana, Blackbox Exporter, Node Exporter and Alertmanager. |
 | [adding-targets.md](adding-targets.md) | Add HTTP and TCP probes; verify the results. |
 | [configuration-reference.md](configuration-reference.md) | What each configuration setting does and why it is set that way. |

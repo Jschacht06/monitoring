@@ -1,4 +1,4 @@
-# This is a Docker Compose template for setting up Prometheus, Grafana, Blackbox Exporter, Alertmanager and Alloy.
+# Docker Compose template for the monitoring stack and sanitized public status page.
 # Replace <your-host> (twice: prometheus and alertmanager) with the IP address of your host.
 services:
   prometheus:
@@ -69,6 +69,33 @@ services:
       - ./alloy/logging-root.crt:/etc/alloy/logging-root.crt:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro   # read-only, but still root-equivalent access to Docker
       - alloy_data:/var/lib/alloy/data
+      
+  # Create status-page/services.json before starting; see docs/public-status-page.md.
+  # Loopback by default; use your private LAN IP in the local copy for direct LAN access.
+  status-page:
+    build: ./status-page
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      STATUS_CONFIG: /config/services.json
+    volumes:
+      - type: bind
+        source: ./status-page/services.json
+        target: /config/services.json
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+
 volumes:
   prometheus_data:
   grafana_data:

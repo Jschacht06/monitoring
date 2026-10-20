@@ -41,3 +41,7 @@ The [Smith metric integration](smith-resource-metrics.md), [resource dashboard t
 ## Completion boundary
 
 The [teacher-requirements review](service-health-tests.md#comparison-with-the-teachers-requirements) separates completed dashboard work from school intake/coverage, application contracts, full configuration/rule/catalogue restore and the team's other NOC deliverables. Prometheus/Alertmanager authentication is known pending work owned by the stack team; planned Authentik integration is not counted as implemented protection.
+
+## Public status page
+
+The [sanitized public page](../../docs/public-status-page.md) is a separate component using the same private Prometheus source. It publishes only approved service aliases and Up/Down; it does not use anonymous access to the internal Grafana dashboards. The homelab installation now has an operator- and screenshot-confirmed healthy baseline with three separate Up rows. Controlled failure/recovery, disclosure inspection and the approved external route still need acceptance evidence.

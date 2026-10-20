@@ -12,6 +12,7 @@ flowchart LR
         subgraph noc["LXC noc-core (Docker Compose)"]
             prom["Prometheus :9090<br/>rules/alerts.yml<br/>targets/*.yml"]
             graf["Grafana :3000"]
+            status["Public status :8080<br/>(loopback origin by default)"]
             bb["Blackbox Exporter :9115<br/>(internal only)"]
             am["Alertmanager :9093"]
             ne["node_exporter :9100<br/>(internal only)"]
@@ -24,6 +25,7 @@ flowchart LR
     end
 
     graf -- "PromQL queries" --> prom
+    status -- "private fixed query" --> prom
     prom -- "scrape /probe?target=...&module=..." --> bb
     prom -- "scrape /metrics" --> ne
     bb -- "probe" --> web
@@ -65,6 +67,10 @@ Tested end to end:
 - **Service catalogue documentation and dashboard template**: ownership, contacts and dependencies; see [grafana/docs/service-catalogue.md](grafana/docs/service-catalogue.md).
 - **Grafana service-list/health validation**: homelab Down/recovery, Unknown, latency and Viewer access checked; dashboard-only restore to a separate Grafana operator-confirmed in approximately 10 minutes, without restore screenshots. Start with [Grafana documentation](grafana/docs/README.md); see the [test report and requirements review](grafana/docs/service-health-tests.md). Smith and full-stack/data restore remain separate.
 
+Implemented with live acceptance pending:
+
+- **Sanitized public status page**: a separate component publishes only approved aliases and Up/Down using existing Blackbox probes. The operator confirmed the live homelab healthy baseline on 20 October 2026 with three separate Up rows. Controlled live failures and external publication remain pending. No raw Prometheus/Grafana access is exposed by it. [Setup, tests and publication](docs/public-status-page.md).
+
 Written but not tested:
 
 - **Alert `CertificateExpiryCritical`** (critical): a certificate expires within 3 days or has expired. Its flip test is pending.
@@ -77,7 +83,7 @@ Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tri
 ### Planned (not built yet)
 
 - Loki for logs
-- Public or internal status page
+- Public status-page acceptance and approved HTTPS route; the [sanitized component](docs/public-status-page.md) has a confirmed homelab healthy baseline, with live failures, disclosure inspection and public routing still pending
 - Grafana dashboards as code (provisioning)
 - Full-stack/data backup and restore of Prometheus, Grafana and Alertmanager; dashboard JSON restore is recorded separately above
 - Automated deployment with Ansible/Terraform
@@ -96,20 +102,24 @@ cp alertmanager/template.yml alertmanager/alertmanager.yml
 cp pve/template.yml pve/pve.yml
 nano pve/pve.yml                       # Proxmox API token, or delete the pve-exporter service from compose.yaml
 nano alertmanager/alertmanager.yml     # fill in SMTP settings and recipients
+cp status-page/config-template.json status-page/services.json
+nano status-page/services.json        # choose public rows and replace every check placeholder with exact target labels
+docker compose build status-page
+docker compose run --rm --no-deps --entrypoint python status-page -B -c 'from server import load_services; load_services("/config/services.json"); print("Status mapping valid")'
 docker compose up -d
-docker compose ps                      # all six services should be "Up"
+docker compose ps                      # all seven configured services should be "Up"
 ```
 
 Then open Prometheus on `http://<noc-core-ip>:9090`, Grafana on `http://<noc-core-ip>:3000` and Alertmanager on `http://<noc-core-ip>:9093`.
 
-The quick start does not add any probe targets yet. Add your first target file as described in [docs/setup.md](docs/setup.md#5-create-prometheusyml-and-add-your-first-targets), then see [docs/adding-targets.md](docs/adding-targets.md) for your own services.
+The quick start does not add probe targets automatically. Before filling the public mapping, add your first target file as described in [docs/setup.md](docs/setup.md#5-create-prometheusyml-and-add-your-first-targets), then copy the exact target labels into the mapping using the [status-page guide](docs/public-status-page.md). Continue to startup only after Status mapping valid is printed. If the page is not needed, omit its mapping/build steps and remove the status-page service block from your local compose.yaml.
 
 ## Repo layout
 
 ```text
 .
 ├── README.md                     # This file
-├── compose-template.yaml         # Docker Compose stack; copy to compose.yaml (ignored by Git) and set your host IP
+├── compose-template.yaml         # Monitoring stack including status-page; copy to compose.yaml and customize
 ├── .gitignore                    # Keeps local configs, secrets, real targets and proposed API/budget copies out of Git
 ├── alertmanager/
 │   └── template.yml              # Alertmanager config template; copy to alertmanager.yml and add SMTP + recipients

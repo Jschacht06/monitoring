@@ -182,11 +182,22 @@ Real target files are ignored by Git, because they contain internal addresses. T
 
 ## 6. Start the stack
 
+The main Compose template includes status-page. Before starting the complete stack, create its private mapping and configure the intended public rows using the [status-page guide](public-status-page.md#2-choose-the-public-services-and-exact-private-checks). Copy exact labels from the target files created above and replace every placeholder; a template with placeholders will fail startup. On first installation:
+
+~~~bash
+cp status-page/config-template.json status-page/services.json
+nano status-page/services.json
+docker compose build status-page
+docker compose run --rm --no-deps --entrypoint python status-page -B -c 'from server import load_services; load_services("/config/services.json"); print("Status mapping valid")'
+~~~
+
+Continue only after validation succeeds. If the page is not part of this installation, remove the status-page service block from your local compose.yaml and skip its mapping/build steps. Keep an existing working services.json when updating an installation.
+
 ```bash
 docker compose up -d
 ```
 
-`-d` runs the containers in the background. Compose creates the six services and three named volumes:
+`-d` runs the containers in the background. The complete template creates seven services and three named volumes (fewer services if optional components were removed):
 
 | Service | Image | Port on noc-core |
 |---|---|---|
@@ -196,6 +207,7 @@ docker compose up -d
 | alertmanager | `prom/alertmanager:v0.34.1` | 9093 |
 | node-exporter | `prom/node-exporter:v1.12.1` | none (internal, 9100) |
 | pve-exporter | `prompve/prometheus-pve-exporter:3.10.1` | none (127.0.0.1:9221 for tests; needs `pve/pve.yml`, see the [how-to](how-to-guides.md#monitor-proxmox-guests-with-pve-exporter)) |
+| status-page | Local build from `status-page/Dockerfile` | 127.0.0.1:8080 by default; configure the origin binding in the local copy for LAN access |
 
 **Check:**
 
@@ -206,7 +218,7 @@ docker compose exec prometheus promtool check rules /etc/prometheus/rules/alerts
 docker compose exec alertmanager amtool check-config /etc/alertmanager/alertmanager.yml
 ```
 
-- `ps`: all six services have the status `Up` (not `Restarting`).
+- `ps`: all configured services (seven in the complete template) have the status `Up` (not `Restarting`).
 - `promtool check config`: `SUCCESS`, and it finds 1 rule file.
 - `promtool check rules`: `SUCCESS: 5 rules found`.
 - `amtool check-config`: `SUCCESS`, and it lists 4 receivers and 0 inhibit rules.

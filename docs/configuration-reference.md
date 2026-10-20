@@ -9,6 +9,7 @@ This page explains every config file in the repo: what each setting does and **w
 | `pve/pve.yml` (from `pve/template.yml`) | pve-exporter | Template only (holds the Proxmox API token secret) |
 | `prometheus/rules/alerts.yml` | Prometheus | Yes |
 | `prometheus/targets/*.yml` | Prometheus (file_sd) | Template only |
+| `status-page/services.json` (from `status-page/config-template.json`) | Status collector | Template only; holds private check identities and approved public aliases |
 | `blackbox/blackbox.yml` | Blackbox Exporter | Yes |
 | `alertmanager/alertmanager.yml` (from `alertmanager/template.yml`) | Alertmanager | Template only (holds the SMTP password) |
 
@@ -636,7 +637,7 @@ To add a rule, see [how-to-guides.md](how-to-guides.md#add-or-change-an-inhibit-
 
 The repo tracks `compose-template.yaml`. Copy it to `compose.yaml` (ignored by Git) and replace `<your-host>` (twice: in `prometheus` and in `alertmanager`).
 
-### Pinned versions
+### Container versions
 
 | Service | Image |
 |---|---|
@@ -646,13 +647,14 @@ The repo tracks `compose-template.yaml`. Copy it to `compose.yaml` (ignored by G
 | alertmanager | `prom/alertmanager:v0.34.1` |
 | node-exporter | `prom/node-exporter:v1.12.1` |
 | pve-exporter | `prompve/prometheus-pve-exporter:3.10.1` |
+| status-page | Local build from `status-page/Dockerfile`, using `python:3.14-slim` |
 
-Why pinned, not `latest`: a rebuild or a new host gets exactly the versions that were tested. Upgrades become a deliberate change you can review and roll back. To upgrade, change the tag, read the release notes and run `docker compose pull && docker compose up -d`.
+The exporter/monitoring image tags select the tested release versions. The status image is built locally; its Python minor-version tag can receive upstream patch updates. To upgrade the upstream services, change the tag, read the release notes and run `docker compose pull && docker compose up -d`. To refresh the status image, use `docker compose build --pull status-page` and then recreate only that service.
 
 ### Common settings
 
 - `restart: unless-stopped`: containers come back after a crash or a reboot of the LXC, but not if you stopped them on purpose.
-- Services reach each other by **service name** on the default Compose network (`prometheus`, `grafana`, `blackbox`, `alertmanager`, `node-exporter`, `pve-exporter`). That's why configs use `blackbox:9115` and `alertmanager:9093` instead of IPs.
+- Services reach each other by **service name** on the default Compose network (`prometheus`, `grafana`, `blackbox`, `alertmanager`, `node-exporter`, `pve-exporter`, `status-page`). That's why configs use `blackbox:9115` and `alertmanager:9093` instead of IPs.
 
 ### prometheus
 
@@ -756,3 +758,7 @@ volumes:
 ```
 
 Named volumes managed by Docker. They survive `docker compose down`. **`docker compose down -v` deletes them**, together with all metrics, dashboards and silences. Backup and restore is planned, not built.
+
+## Public status component
+
+The main `compose-template.yaml` includes `status-page`, a read-only, non-root status container on the existing Compose network. Create and customize `status-page/services.json` before starting it, or remove the service block from your local compose.yaml if the page is not needed. Only its origin is bound on loopback port 8080. `status-page/services.json` selects exact private target identities and provides the only service names published. It is ignored by Git and excluded from the image build. The fixed collector query requires successful fresh probe/scrape samples; failures and uncertainty are published as Down. See the [full setup and acceptance guide](public-status-page.md) for settings, status semantics, reverse-proxy publication and backup.
