@@ -33,7 +33,7 @@ Continue here after the service catalogue works. The health dashboard uses exist
 | [health-and-usage-dashboards.md](../grafana/docs/health-and-usage-dashboards.md) | Numbered dashboard setup, filters, panel queries/settings, interpretation, acceptance evidence, export and troubleshooting. |
 | [service-health-tests.md](../grafana/docs/service-health-tests.md) | Homelab test report, Viewer verification, approximately 10-minute dashboard restore and teacher-requirements review. |
 | [smith-resource-metrics.md](../grafana/docs/smith-resource-metrics.md) | Proposed read-only Proxmox API integration, guest/group mapping, approved budgets, complete allocation totals and validation. |
-| [service-health-dashboard-template.json](../grafana/service-health-dashboard-template.json) | Importable health, status-history, latency, observed-availability, sample-coverage and HTTPS certificate-expiry panels. |
+| [service-health-dashboard-template.json](../grafana/service-health-dashboard-template.json) | Importable health, status-history, latency, observed-availability, sample-coverage, HTTPS certificate-expiry and host disk SMART-health panels. |
 | [smith-resources-dashboard-template.json](../grafana/smith-resources-dashboard-template.json) | Importable allocation/budget bars, CPU/memory/disk trends, guest inventory and missing-data indicators. |
 | [smith-resource-rules-template.yml](../grafana/docs/smith-resource-rules-template.yml) | Placeholder rules to copy, customize and validate; not loaded from the docs folders. |
 

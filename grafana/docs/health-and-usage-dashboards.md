@@ -7,14 +7,14 @@ This guide continues from the working [service catalogue](service-catalogue.md).
 | Dashboard | Questions it answers | Data needed |
 |---|---|---|
 | Service catalogue (existing) | What is monitored, who owns it, what does it depend on? | Target labels on `up` |
-| Service health and trends (new) | Which check fails, is the check itself working, how has health/latency changed? | Existing Blackbox probes and `up` |
+| Service health and trends (new) | Which check fails, is the check itself working, how has health/latency changed? | Existing Blackbox probes, `up` and optional smartctl drive metrics |
 | Smith resources and budgets (new) | How much is allocated, how much is used, how close is each group to its approved budget? | Approved Proxmox API metrics, guest inventory and group budgets |
 
-The health dashboard can be built once the existing stack and Blackbox targets pass step 1. Its certificate panel also needs at least one HTTPS target; HTTP-only checks have no certificate metrics. The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
+The health dashboard can be built once the existing stack and Blackbox targets pass step 1. Its certificate panel also needs at least one HTTPS target; HTTP-only checks have no certificate metrics. Its disk-health table needs the existing smartctl exporter on each physical host; see [Host disk SMART health](#host-disk-smart-health). The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
 
 Commands in this guide run inside noc-core from `/opt/monitoring`. Dashboard JSON files are edited on your own computer and uploaded through Grafana, just like the catalogue template. They do not need to be stored on the LXC.
 
-**Choose your route:** importing the template in step 3 creates all nine health panels, including their queries and display settings. After checking the filters in step 4, use steps 5 and 6 as reference and complete only their final **Check** paragraphs. Follow their panel-creation instructions only if you are building manually or correcting a missing/incorrect panel. For service-health work, skip the deferred Smith sections 7–9 and continue to step 10 for acceptance, operator access and restore. Resume step 7 when Smith resource work is authorized.
+**Choose your route:** importing the template in step 3 creates all ten health panels, including their queries and display settings. After checking the filters in step 4, use steps 5 and 6 as reference and complete only their final **Check** paragraphs. Follow their panel-creation instructions only if you are building manually or correcting a missing/incorrect panel. For service-health work, skip the deferred Smith sections 7–9 and continue to step 10 for acceptance, operator access and restore. Resume step 7 when Smith resource work is authorized.
 
 ---
 
@@ -42,7 +42,7 @@ The supplied configuration reference describes **30-second** scrapes and retenti
 
 In Prometheus, check *Status → Configuration*, *Command-line flags* and *Target health* (names differ by version). Confirm the Blackbox scrape interval, last scrape and scrape errors. In Grafana’s Prometheus data-source settings, set **Scrape interval** to the same value. `http://prometheus:9090` is correct only when Grafana and Prometheus share the Compose network described in the supporting setup guide; otherwise use the address reachable from the Grafana server.
 
-The health template has two hidden **Constant** variables: `probe_interval_s=30` (coverage denominator) and `probe_freshness_s=90` (maximum accepted sample age, exclusive). Set the first to the verified interval in seconds; choose the second longer than normal scrape completion and jitter, typically three intervals for this stack. Also update the status-history **Min interval** separately if collection is not every 30s. One coverage constant assumes every selected check uses the same interval; split dashboards or adapt the coverage calculation if intervals differ. These display settings do not change Prometheus collection. See [Constant variables](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/add-template-variables/#add-a-constant-variable).
+For the probe panels, the health template has two hidden **Constant** variables: `probe_interval_s=30` (coverage denominator) and `probe_freshness_s=90` (maximum accepted sample age, exclusive). Set the first to the verified interval in seconds; choose the second longer than normal scrape completion and jitter, typically three intervals for this stack. Also update the status-history **Min interval** separately if collection is not every 30s. One coverage constant assumes every selected check uses the same interval; split dashboards or adapt the coverage calculation if intervals differ. These display settings do not change Prometheus collection. See [Constant variables](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/add-template-variables/#add-a-constant-variable).
 
 **Check:** compare current `up{job="blackbox"}` with the agreed service/check list and the target files; no metric query can find a target that was never configured. Each expected probe needs `group`, `service`, `host`, `module`, `owner`, `contact` and `dependencies`. Confirm the `module` label matches the actual `?module=` relabeling and that `instance` is the destination, not `blackbox:9115`. The supplied [target guide](../../docs/adding-targets.md) describes this layout. An empty HTTP-duration query is expected if there are no HTTP checks with module names starting `http_`, or all are failing. The current template includes all `http_.*` modules; other naming conventions require explicitly updating the panel selector.
 
@@ -101,14 +101,14 @@ Status history uses separate cells. An explicit point setting requests a coarser
 
 1. Save a local copy named `service-health-dashboard.json`.
 2. Replace `<your dashboard title here>`, `<your description here>` and `<your environment tag here>`. Suggested title: **Service health and trends**; environment tag: `school` or `home-test`.
-3. Confirm the four variables are group, service, probe_interval_s and probe_freshness_s, with each name defined once. The current template is already cleaned up; remove duplicate definitions only from an older copy. Keep `id: null`, `uid: null` and every `${DS_PROMETHEUS}` reference. These create a new dashboard and let the import form select the destination source. Check the hidden Constant variables in the JSON against step 1 before import; edit their `query`, `current.text`, `current.value` and `options` value consistently, or adjust them afterward in Variables.
+3. Confirm the six variables are group, service, disk_host, probe_interval_s, probe_freshness_s and disk_freshness_s, with each name defined once. The current template is already cleaned up; remove duplicate definitions only from an older copy. Keep `id: null`, `uid: null` and every `${DS_PROMETHEUS}` reference. These create a new dashboard and let the import form select the destination source. Check the hidden Constant variables in the JSON against step 1 before import; edit their `query`, `current.text`, `current.value` and `options` value consistently, or adjust them afterward in Variables.
 4. In Grafana, go to *Dashboards → New → Import dashboard* and upload the complete local JSON file.
 5. Choose the project folder and the existing Prometheus source. Use a new UID; leave the catalogue's UID alone.
 6. Click **Import**, choose **All** for the filters, and set the time range to **Last 6 hours**, ending at **now**, with **30s** refresh.
 
 Import follows [Grafana's documented upload workflow](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/import-dashboards/). Keep the imported dashboard saved in Grafana. Saving it there does not update the local JSON file; export a new copy after later edits.
 
-**Check before continuing:** the dashboard shows three summary counters, a current-check table, a status history, latency, observed availability, sample coverage and the HTTPS certificate table. The certificate table may show No data when no HTTPS targets exist; investigate missing results for expected HTTPS targets. Confirm the history displays colored cells without a point-limit error at **Last 6 hours**, then **Last 24 hours** and **Last 7 days**; a new installation will only show the history collected so far. Return to Last 6 hours and save the dashboard. No container restart is needed for an import.
+**Check before continuing:** the dashboard shows three summary counters, a current-check table, a status history, latency, observed availability, sample coverage, the HTTPS certificate table and Host disk SMART health. The certificate table may show No data when no HTTPS targets exist; investigate missing results for expected HTTPS targets. Confirm the history displays colored cells without a point-limit error at **Last 6 hours**, then **Last 24 hours** and **Last 7 days**; a new installation will only show the history collected so far. Return to Last 6 hours and save the dashboard. No container restart is needed for an import.
 
 If you already imported an earlier copy, update the existing panel during this setup check:
 
@@ -124,7 +124,7 @@ Long periods show sampled status at a wider time step and can miss short outages
 
 ## 4. Configure the filters (also used when building manually)
 
-The template already supplies `group` and `service`; importing it does not require adding them again. Step 4 is a check of those filters, or their setup when building manually.
+The template already supplies `group`, `service` and `disk_host`; importing it does not require adding them again. Step 4 checks the probe filters; the independent Disk host filter is explained under [Host disk SMART health](#host-disk-smart-health).
 
 The supplied setup guide lists Grafana **13.2.2**; verify the running version. Current Grafana documentation describes the following editor paths; menu names and preview features vary by version:
 
@@ -140,12 +140,14 @@ These paths follow Grafana's [dashboard settings](https://grafana.com/docs/grafa
 |---|---|---|---|
 | `group` | `group` | `up{job="blackbox",group!=""}` | Multi-value, Include All, Custom all value `.*` |
 | `service` | `service` | `up{job="blackbox",group=~"$group",service!=""}` | Multi-value, Include All, Custom all value `.*` |
+| `disk_host` | `host` | `up{job="smartctl",host!=""}` | Multi-value, Include All, Custom all value `.*`; disk table only |
 
 Set refresh to **On dashboard load**. Changing `group` refreshes the dependent `service` variable; use All again if a previously selected service does not exist in the new group. After target changes, reload the dashboard to refresh options. Label-value queries can include historical series, so an old dropdown value can legitimately produce No data in the current table. For older/classic editors, the equivalent queries are:
 
 ```text
 label_values(up{job="blackbox",group!=""}, group)
 label_values(up{job="blackbox",group=~"$group",service!=""}, service)
+label_values(up{job="smartctl",host!=""}, host)
 ```
 
 These are **Grafana variable queries**, not PromQL to paste into Prometheus. Multi-value variables require regex matchers such as `group=~"$group"`; see [Grafana's Prometheus variable documentation](https://grafana.com/docs/grafana/latest/datasources/prometheus/template-variables/).
@@ -373,6 +375,70 @@ For a homelab without HTTPS services, use the [temporary public HTTPS example](.
 **Homelab confirmation — 16 October 2026:** the operator confirmed the manually configured certificate panel works after changing the existing `http_2xx` module to prefer IPv4. The original probe had selected an IPv6 destination with no working route. This confirms that live configuration and display; fresh import of the updated complete template, school deployment and critical-certificate notification testing remain separate checks.
 
 **Check:** select the HTTPS target's group/service and compare the panel's days remaining with the same query in Explore. Confirm the numeric cells have the expected colour and HTTP-only services are absent. Preserve evidence of the working display.
+
+---
+
+### Host disk SMART health
+
+The health template includes a full-width **Host disk SMART health** table below the certificate table. It shows **Host**, **Disk**, **SMART health** and **Exporter**, using the existing `smartctl` scrape job. **Passed** is green (`1`), **Failed** is red (`0`), and **Unknown** is gray (`-1` or no value). It displays the latest exported overall SMART assessment, not the result or completion time of a short/long self-test. The exporter reads `smart_status.passed`; see the [v0.14.0 implementation](https://github.com/prometheus-community/smartctl_exporter/blob/v0.14.0/smartctl.go) and [metric definitions](https://github.com/prometheus-community/smartctl_exporter/blob/v0.14.0/metrics.go).
+
+**Prerequisites:** the physical host must already run [smartctl_exporter](../../docs/how-to-guides.md#add-smartctl_exporter-for-drive-health), with an enabled Prometheus job named `smartctl` and a consistent, non-empty `host` label. Physical disks are not normally visible through SMART inside an LXC/VM. Adding the dashboard does not install the exporter, enable its optional scrape job or start disk tests.
+
+When monitoring runs in a **Debian VM on Titan**, collect physical-drive SMART data on **Titan itself**, not on the monitoring VM's virtual disk. Run the exporter installation steps on the physical host only if its OS is supported by that guide; first check `cat /etc/os-release` and `systemctl status smartctl_exporter --no-pager` on Titan. Configure the existing Prometheus on the monitoring VM to scrape `<titan-ip>:9633`, using `host: titan` to match its service probes. For example, enable/update this job under `scrape_configs` in the actual Prometheus configuration (do not add a duplicate job):
+
+```yaml
+  - job_name: smartctl
+    static_configs:
+      - targets: ['<titan-ip>:9633']
+        labels:
+          group: host
+          host: titan
+          service: smartctl-exporter
+          owner: '<owner>'
+          contact: '<contact-person> (<contact-address>)'
+          dependencies: '<dependencies>'
+```
+
+Fill in the real address and ownership values, then follow the linked exporter guide to validate the configuration and restart/reload Prometheus. Select **Disk host → titan** after the first successful scrape. The source queried on 20 October 2026 returned only `prometheus`, `node` and `blackbox` targets and no SMART metrics, so this collector/scrape setup is still required for that source.
+
+The **Disk host** variable (`disk_host`) lists `host` values from `up{job="smartctl",host!=""}` and defaults to All. It filters only this table. The existing Group and Service filters still apply only to the probe panels; services and the SMART exporter have different target labels. To inspect the disks behind a service, find its Host in **Current probe checks** and select that value under Disk host.
+
+The hidden Constant `disk_freshness_s=180` is the maximum accepted Prometheus sample age in seconds (exclusive) for both the SMART status and `up`. Verify the actual smartctl job scrape interval; increase the tolerance if necessary. A fresh scrape with a valid `0` or `1` is required to show Failed or Passed. This checks scrape/sample freshness, not when the exporter last polled the drive: its cached data and polling failures still need investigation in exporter logs.
+
+Query **A** is **Instant**, format **Table**:
+
+```promql
+max by (host, instance, device) (
+  (smartctl_device_smart_status{job="smartctl",host=~"$disk_host"} == 0 or smartctl_device_smart_status{job="smartctl",host=~"$disk_host"} == 1)
+  and on(job, instance) (up{job="smartctl",host=~"$disk_host"} == 1)
+  and on(job, instance) (time() - timestamp(up{job="smartctl",host=~"$disk_host"}) < $disk_freshness_s)
+  and (time() - timestamp(smartctl_device_smart_status{job="smartctl",host=~"$disk_host"}) < $disk_freshness_s)
+)
+or on(host, instance, device)
+(
+  -1 + 0 * max by (host, instance, device) (
+    last_over_time(smartctl_device{job="smartctl",host=~"$disk_host"}[24h])
+    or last_over_time(smartctl_device_smart_status{job="smartctl",host=~"$disk_host"}[24h])
+  )
+)
+```
+
+The fallback keeps disks seen through `smartctl_device` or `smartctl_device_smart_status` in the previous **24 hours** visible as Unknown when their current result is missing, invalid, stale or the exporter is down. It never reuses an old Passed value. This inventory window is fixed and independent of the dashboard time range. After 24 hours without either metric a disk disappears from the table; an unseen drive, unavailable inventory or empty table does not establish healthy disks. Compare against the actual drive inventory and keep the existing `DriveNotReadable` and `DriveDisappeared` alerts.
+
+For a manual build, add a Table with this query, hide Time, rename `host` → Host, `device` → Disk, `Value` → SMART health and `instance` → Exporter, in that order. Apply the value mappings and color the SMART health cell background. Sort SMART health ascending so Unknown and Failed appear before Passed. Add the Disk host query variable and hidden disk_freshness_s constant from this section. Importing the updated template/export already creates these settings.
+
+**Check on noc-core**, from `/opt/monitoring` (read-only; no disk tests are started):
+
+```bash
+docker compose exec -T prometheus promtool query instant \
+  http://localhost:9090 'up{job="smartctl"}'
+docker compose exec -T prometheus promtool query instant \
+  http://localhost:9090 'smartctl_device_smart_status{job="smartctl"}'
+docker compose exec -T prometheus promtool query instant \
+  http://localhost:9090 'smartctl_device{job="smartctl"}'
+```
+
+In Grafana Explore, run query A with `$disk_host` replaced by `.*` and `$disk_freshness_s` by `180`; this checks the complete query against the live source without relying on dashboard variables. Compare every disk with the table, confirm the Passed/Failed colors, and select a Disk host. Changing Group/Service must not change this table. A failed exporter scrape must show known disks as Unknown rather than preserving Passed; validate that during an agreed monitoring test, without unplugging disks just to test a dashboard. No live SMART-table acceptance is claimed by the earlier service-health screenshots.
 
 ---
 

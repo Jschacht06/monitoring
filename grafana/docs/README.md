@@ -2,7 +2,7 @@
 
 Documentation and teacher-requirements review completed on 20 October 2026. The homelab test results below were reported on 16 October 2026.
 
-Start here for the service list and service-health dashboards. They share the existing Prometheus source: the service list provides current probe status, ownership and dependencies; the health dashboard adds history, latency, availability, sample coverage and HTTPS certificate expiry. Keeping two dashboards is an organizational choice, not a requirement to duplicate every panel.
+Start here for the service list and service-health dashboards. They share the existing Prometheus source: the service list provides current probe status, ownership and dependencies; the health dashboard adds history, latency, availability, sample coverage, HTTPS certificate expiry and host disk SMART health. Keeping two dashboards is an organizational choice, not a requirement to duplicate every panel.
 
 **Status — 16 October 2026:** the service-list and service-health work is complete for the tested homelab scope. Down/recovery, Unknown, slow-response display and Viewer access were checked with screenshots and operator confirmation. A separate Grafana restore was operator-confirmed in approximately 10 minutes; no restore screenshots were taken. See the [test report and requirements review](service-health-tests.md). Smith resource quotas and resource trends remain deferred. Homelab completion does not establish school deployment or completion of the entire NOC assignment.
 
@@ -18,7 +18,7 @@ Use the following route for a new installation or transfer to school. Each topic
 | 4 | Import the health dashboard and verify its interval/freshness constants | [Health template import](health-and-usage-dashboards.md#3-import-the-health-dashboard) |
 | 5 | Import the service-list template with its current-status table and metadata checks | [Service-list creation/import](service-catalogue-dashboard.md#1-choose-how-to-create-the-dashboard) |
 | 6 | Check successful HTTP latency, including custom http_ modules | [Latency query and existing-import updates](health-and-usage-dashboards.md#6-understand-or-build-the-trend-panels) |
-| 7 | Verify HTTPS certificate days and investigate missing expected results | [Certificate panel](health-and-usage-dashboards.md#https-certificate-expiry) |
+| 7 | Verify HTTPS certificate days and physical-host disk health; investigate missing expected results | [Certificate panel](health-and-usage-dashboards.md#https-certificate-expiry) and [SMART table](health-and-usage-dashboards.md#host-disk-smart-health) |
 | 8 | Compare the dashboard with source metrics during controlled failures | [Acceptance checks](health-and-usage-dashboards.md#10-run-the-acceptance-checks-and-collect-evidence) and [completed tests](service-health-tests.md) |
 | 9 | Configure and test a read-only operator | [Viewer setup and verification](service-catalogue-dashboard.md#8-verify-the-operator-account) |
 | 10 | Export both dashboards and restore them in a separate Grafana | [Detailed export/restore procedure](service-catalogue-dashboard.md#9-verify-dashboard-restore-on-a-separate-grafana) |
@@ -30,7 +30,7 @@ The stack must already work; use the [base installation guide](../../docs/setup.
 | Template | Included behaviour |
 |---|---|
 | [dashboard-template.json](../dashboard-template.json) | Four panels: current destination-probe status, service inventory, missing-metadata count and missing-metadata detail |
-| [service-health-dashboard-template.json](../service-health-dashboard-template.json) | Nine panels: three counters, current status, history, successful HTTP latency, observed availability, sample coverage and certificate days |
+| [service-health-dashboard-template.json](../service-health-dashboard-template.json) | Ten panels: three counters, current status, history, successful HTTP latency, observed availability, sample coverage, certificate days and host disk SMART health |
 
 Copy the template, replace its title/description/environment placeholders and map the existing Prometheus source during import. Do not manually recreate panels that already exist. A live imported dashboard can have a different UID from the template; export it before deliberately replacing it.
 

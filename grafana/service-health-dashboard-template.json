@@ -86,6 +86,33 @@
         "regex": ""
       },
       {
+        "name": "disk_host",
+        "label": "Disk host",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(up{job=\"smartctl\",host!=\"\"}, host)",
+        "query": {
+          "query": "label_values(up{job=\"smartctl\",host!=\"\"}, host)",
+          "refId": "var-disk-host"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": "",
+        "description": "Filters only Host disk SMART health. Independent of the probe Group/Service filters."
+      },
+      {
         "name": "probe_interval_s",
         "type": "constant",
         "query": "30",
@@ -120,6 +147,24 @@
         ],
         "hide": 2,
         "description": "Maximum accepted up/probe sample age in seconds, exclusive. Default90 assumes30s scrapes; choose a tolerance longer than normal scrape completion/jitter."
+      },
+      {
+        "name": "disk_freshness_s",
+        "type": "constant",
+        "query": "180",
+        "current": {
+          "text": "180",
+          "value": "180"
+        },
+        "options": [
+          {
+            "text": "180",
+            "value": "180",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Maximum accepted smartctl status/up Prometheus sample age in seconds, exclusive. Default 180 assumes 30s scrapes; adjust for the actual smartctl job interval. Does not measure the exporter cache age."
       }
     ]
   },
@@ -426,13 +471,13 @@
                   {
                     "type": "value",
                     "options": {
-                      "1": {
-                        "text": "Up",
-                        "color": "green"
-                      },
                       "0": {
                         "text": "Down",
                         "color": "red"
+                      },
+                      "1": {
+                        "text": "Up",
+                        "color": "green"
                       },
                       "-1": {
                         "text": "Unknown",
@@ -546,13 +591,13 @@
             {
               "type": "value",
               "options": {
-                "1": {
-                  "text": "Up",
-                  "color": "green"
-                },
                 "0": {
                   "text": "Down",
                   "color": "red"
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green"
                 },
                 "-1": {
                   "text": "Unknown",
@@ -1007,6 +1052,159 @@
               "module": "Check",
               "instance": "Target",
               "Value": "Days remaining"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Host disk SMART health",
+      "description": "Latest exported overall SMART health: Passed (1), Failed (0), or Unknown when the status is missing, invalid, stale or the exporter scrape failed. Known disks stay visible as Unknown for up to 24h after their last device/status sample. Disk host filters this table independently of the probe Group/Service filters. This is the overall SMART assessment, not a short/long self-test result or its timestamp. Freshness checks apply to Prometheus samples; exporter polling/cache health must be checked separately.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "max by (host, instance, device) (\n  (smartctl_device_smart_status{job=\"smartctl\",host=~\"$disk_host\"} == 0 or smartctl_device_smart_status{job=\"smartctl\",host=~\"$disk_host\"} == 1)\n  and on(job, instance) (up{job=\"smartctl\",host=~\"$disk_host\"} == 1)\n  and on(job, instance) (time() - timestamp(up{job=\"smartctl\",host=~\"$disk_host\"}) < $disk_freshness_s)\n  and (time() - timestamp(smartctl_device_smart_status{job=\"smartctl\",host=~\"$disk_host\"}) < $disk_freshness_s)\n)\nor on(host, instance, device)\n(\n  -1 + 0 * max by (host, instance, device) (\n    last_over_time(smartctl_device{job=\"smartctl\",host=~\"$disk_host\"}[24h])\n    or last_over_time(smartctl_device_smart_status{job=\"smartctl\",host=~\"$disk_host\"}[24h])\n  )\n)",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SMART health"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Failed",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "Passed",
+                        "color": "green"
+                      },
+                      "-1": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "noValue",
+                "value": "Unknown"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#808080",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 0
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "SMART health",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            },
+            "indexByName": {
+              "host": 0,
+              "device": 1,
+              "Value": 2,
+              "instance": 3
+            },
+            "renameByName": {
+              "host": "Host",
+              "device": "Disk",
+              "Value": "SMART health",
+              "instance": "Exporter"
             }
           }
         }

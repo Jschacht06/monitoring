@@ -683,6 +683,8 @@ Verify:
 - `smartctl_device_smart_status{host="<host-name>"}` returns one series per drive.
 - `smartctl_device_temperature{host="<host-name>"}` returns the temperatures (label `temperature_type="current"`).
 
+The service-health dashboard can display these overall SMART results in its [Host disk SMART health table](../grafana/docs/health-and-usage-dashboards.md#host-disk-smart-health). Import the updated dashboard and select **Disk host**; the table shows Passed, Failed or Unknown.
+
 `MonitoringCheckFailed` already covers this job, so you are alerted if the exporter stops answering.
 
 ### 5. Restrict the port

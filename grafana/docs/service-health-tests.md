@@ -80,7 +80,9 @@ The evidence supports these homelab dashboard results. It does not establish sch
 
 ## Repository verification
 
-The current service-list and health templates were parsed as JSON and checked locally: four catalogue panels and nine health panels, unique panel IDs and variable names, portable Prometheus source mappings, the HTTP-module latency selector, and the certificate query's freshness checks. The health constants occur once each. Local Grafana documentation links were checked after integration.
+**SMART table extension — 20 October 2026:** the updated health template contains ten panels and adds the independent `disk_host` filter and `disk_freshness_s` constant. The new table maps overall SMART status to Passed/Failed and uses Unknown for missing, invalid or stale data and failed scrapes, retaining observed disk inventory for 24 hours. The previous nine panels and their service-only legends are preserved. JSON parsing, matching queries across both export formats, non-overlapping layout, unchanged original panels/settings and local documentation links were checked. The source queried on 20 October returned no `smartctl` target or SMART metrics, so collector setup is pending. This extension requires its own [live acceptance checks](health-and-usage-dashboards.md#host-disk-smart-health); the earlier screenshots do not verify it.
+
+Before the SMART extension, the service-list and health templates were parsed as JSON and checked locally: four catalogue panels and nine health panels, unique panel IDs and variable names, portable Prometheus source mappings, the HTTP-module latency selector, and the certificate query's freshness checks. The health constants occur once each. Local Grafana documentation links were checked after integration.
 
 These checks support the reusable files; the live screenshots and operator statements support the homelab results. Local structural checks do not execute PromQL against the school source or prove a fresh live import of the placeholder templates. The successful restore used exports of the working dashboards.
 
