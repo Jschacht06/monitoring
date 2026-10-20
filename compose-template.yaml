@@ -1,6 +1,5 @@
-# This is a Docker Compose template for setting up Prometheus, Grafana, Blackbox Exporter, and Alertmanager.
+# This is a Docker Compose template for setting up Prometheus, Grafana, Blackbox Exporter, Alertmanager and Alloy.
 # Replace <your-host> (twice: prometheus and alertmanager) with the IP address of your host.
-
 services:
   prometheus:
     image: prom/prometheus:v3.13.3
@@ -57,7 +56,21 @@ services:
       - "127.0.0.1:9221:9221"
     volumes:
       - ./pve/pve.yml:/etc/prometheus/pve.yml:ro
+  alloy:
+    image: grafana/alloy:v1.20.1
+    restart: unless-stopped
+    environment:
+      LOGGING_URL: https://<logging-host-ip>/loki/api/v1/push
+      LOG_HOST: <this-host-name>
+      LOG_OWNER: <owner-name>
+    volumes:
+      - ./alloy/noc-core.alloy:/etc/alloy/config.alloy:ro
+      - ./alloy/secrets:/etc/alloy/secrets:ro
+      - ./alloy/logging-root.crt:/etc/alloy/logging-root.crt:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # read-only, but still root-equivalent access to Docker
+      - alloy_data:/var/lib/alloy/data
 volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  alloy_data:

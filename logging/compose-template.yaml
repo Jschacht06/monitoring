@@ -29,20 +29,7 @@ services:
       - caddy_config:/config
     depends_on:
       - loki
-      - alloy
-  alloy:
-    image: grafana/alloy:v1.20.1
-    restart: unless-stopped
-    environment:
-      LOGGING_URL: https://<logging-host-ip>/loki/api/v1/push
-    volumes:
-         - ./alloy/noc-core.alloy:/etc/alloy/config.alloy:ro
-         - ./alloy/secrets:/etc/alloy/secrets:ro
-         - ./alloy/logging-root.crt:/etc/alloy/logging-root.crt:ro
-         - /var/run/docker.sock:/var/run/docker.sock:ro
-         - alloy_data:/var/lib/alloy/data
 volumes:
   loki_data:
   caddy_data:
   caddy_config:
-  alloy_data:
