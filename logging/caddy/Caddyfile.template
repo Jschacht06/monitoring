@@ -1,0 +1,44 @@
+# Gateway in front of Loki (runs on the logging LXC).
+#
+# What it does:
+#   1. TLS with Caddy's own local CA ("tls internal"): clients must trust its root certificate.
+#   2. One login per tenant. The USERNAME IS THE TENANT NAME.
+#   3. Overwrites X-Scope-OrgID with the tenant of the login, so a client can never pick a tenant.
+#   4. Only the Loki query/push API gets through (no delete API, no /config, no /metrics).
+#   5. /ready is open (it only answers "ready") so the NOC can health-check Loki.
+#
+# Usage: copy this file to Caddyfile (git-ignored) and replace the two hashes.
+# Make a hash with:  docker compose run --rm caddy caddy hash-password
+# To add a tenant: add a line to basic_auth. Nothing changes in Loki.
+{
+	# Internal host: no public certificates, no port-80 redirect, don't touch the container trust store.
+	auto_https disable_redirects
+	skip_install_trust
+}
+
+https://{$LOGGING_HOST} {
+	tls internal
+
+	@delete path /loki/api/v1/delete*
+	handle @delete {
+		respond "forbidden" 403
+	}
+
+	handle /ready {
+		reverse_proxy loki:3100
+	}
+
+	handle /loki/api/v1/* {
+		basic_auth {
+			noc REPLACE_WITH_HASH
+			infra REPLACE_WITH_HASH
+		}
+		reverse_proxy loki:3100 {
+			header_up X-Scope-OrgID {http.auth.user.id}
+		}
+	}
+
+	handle {
+		respond "not found" 404
+	}
+}

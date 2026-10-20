@@ -14,3 +14,12 @@ compose.yaml
 
 // backup files
 *.bak*
+
+
+# logging LXC
+/logging/caddy/*
+!/logging/caddy/Caddyfile.template
+
+# Alloy: real secrets and the gateway certificate stay out of Git
+/alloy/secrets/*
+/alloy/logging-root.crt

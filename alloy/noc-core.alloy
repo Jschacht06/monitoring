@@ -1,0 +1,70 @@
+// Alloy on the NOC server: reads the logs of every Docker container on this host and sends them
+// to Loki as tenant "noc", through the Caddy gateway on the logging LXC.
+//
+// Nothing in this file is specific to one environment. compose.yaml provides:
+//   environment  LOGGING_URL   e.g. https://<logging-host-ip>/loki/api/v1/push
+//                LOG_HOST      value of the "host" label on every log line (the machine name)
+//                LOG_OWNER     value of the "owner" label on every log line
+//   mounts       /etc/alloy/secrets/logging-password   password of the "noc" login, no trailing newline
+//                /etc/alloy/logging-root.crt           root certificate of the gateway (Caddy's local CA)
+//                /var/run/docker.sock (read-only)      to discover containers and read their logs
+// If LOG_HOST or LOG_OWNER is missing, the label becomes "unknown" so the mistake is visible in Grafana.
+
+local.file "logging_password" {
+	filename  = "/etc/alloy/secrets/logging-password"
+	is_secret = true
+}
+
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+}
+
+// Labels on every log line: service, host, owner (the same schema as the Prometheus targets).
+discovery.relabel "containers" {
+	targets = discovery.docker.containers.targets
+
+	// service = container name, replaced by the compose service name when there is one
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "service"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "(.+)"
+		target_label  = "service"
+	}
+
+	rule {
+		target_label = "host"
+		replacement  = coalesce(sys.env("LOG_HOST"), "unknown")
+	}
+
+	rule {
+		target_label = "owner"
+		replacement  = coalesce(sys.env("LOG_OWNER"), "unknown")
+	}
+}
+
+loki.source.docker "containers" {
+	host          = "unix:///var/run/docker.sock"
+	targets       = discovery.docker.containers.targets
+	relabel_rules = discovery.relabel.containers.rules
+	forward_to    = [loki.write.logging.receiver]
+}
+
+loki.write "logging" {
+	endpoint {
+		url = sys.env("LOGGING_URL")
+
+		basic_auth {
+			username = "noc"
+			password = local.file.logging_password.content
+		}
+
+		tls_config {
+			ca_file = "/etc/alloy/logging-root.crt"
+		}
+	}
+}

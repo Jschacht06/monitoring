@@ -1,0 +1,66 @@
+// Alloy on the Proxmox host: reads the systemd journal and sends a short allow-list of units
+// to Loki as tenant "infra", through the Caddy gateway on the logging LXC.
+//
+// Installed as a package (systemd service "alloy"). Environment-specific values:
+//   /etc/default/alloy                     LOGGING_URL=https://<logging-host-ip>/loki/api/v1/push
+//                                          LOG_HOST=<machine name, the "host" label>
+//                                          LOG_OWNER=<owner name, the "owner" label>
+//                                          (a missing LOG_HOST or LOG_OWNER becomes "unknown" in the label)
+//   /etc/alloy/secrets/logging-password    password of the "infra" login, no trailing newline (root:alloy, mode 0640)
+//   /etc/alloy/logging-root.crt            root certificate of the gateway (Caddy's local CA)
+// The alloy user must be in the groups adm and systemd-journal, or no journal entries are read.
+
+local.file "logging_password" {
+	filename  = "/etc/alloy/secrets/logging-password"
+	is_secret = true
+}
+
+// service = the systemd unit without ".service", level = journal priority (err, warning, info, ...)
+loki.relabel "journal" {
+	forward_to = []
+
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "(.+)\\.service"
+		target_label  = "service"
+	}
+
+	rule {
+		source_labels = ["__journal_priority_keyword"]
+		target_label  = "level"
+	}
+}
+
+loki.source.journal "host" {
+	max_age       = "12h"
+	relabel_rules = loki.relabel.journal.rules
+	labels        = {host = coalesce(sys.env("LOG_HOST"), "unknown"), owner = coalesce(sys.env("LOG_OWNER"), "unknown")}
+	forward_to    = [loki.process.allowlist.receiver]
+}
+
+// Only these units are shipped (login attempts and the Proxmox web/API services).
+// Everything else in the journal, including entries without a unit, is dropped here.
+// To ship another unit, add it to the regex.
+loki.process "allowlist" {
+	stage.match {
+		selector = "{service!~\"ssh|pveproxy|pvedaemon\"}"
+		action   = "drop"
+	}
+
+	forward_to = [loki.write.logging.receiver]
+}
+
+loki.write "logging" {
+	endpoint {
+		url = sys.env("LOGGING_URL")
+
+		basic_auth {
+			username = "infra"
+			password = local.file.logging_password.content
+		}
+
+		tls_config {
+			ca_file = "/etc/alloy/logging-root.crt"
+		}
+	}
+}

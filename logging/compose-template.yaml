@@ -1,0 +1,48 @@
+# Logging LXC: Loki behind a Caddy gateway (TLS + one login per tenant).
+#
+# Before the first "docker compose up":
+#   1. Copy this file to compose.yaml and replace <logging-host-ip> below with the address
+#      clients use to reach this LXC (its IP, or a DNS name that resolves to it).
+#   2. Copy caddy/Caddyfile.template to caddy/Caddyfile and fill in the password hashes.
+#      (If a bind-mounted file is missing, Docker creates a FOLDER with that name.)
+
+services:
+  loki:
+    image: grafana/loki:3.7.8
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    # No published port: only Caddy can reach Loki.
+  caddy:
+    image: caddy:2.11.7
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    environment:
+      LOGGING_HOST: <logging-host-ip>
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # keeps Caddy's local CA, so the root certificate stays the same
+      - caddy_config:/config
+    depends_on:
+      - loki
+      - alloy
+  alloy:
+    image: grafana/alloy:v1.20.1
+    restart: unless-stopped
+    environment:
+      LOGGING_URL: https://<logging-host-ip>/loki/api/v1/push
+    volumes:
+         - ./alloy/noc-core.alloy:/etc/alloy/config.alloy:ro
+         - ./alloy/secrets:/etc/alloy/secrets:ro
+         - ./alloy/logging-root.crt:/etc/alloy/logging-root.crt:ro
+         - /var/run/docker.sock:/var/run/docker.sock:ro
+         - alloy_data:/var/lib/alloy/data
+volumes:
+  loki_data:
+  caddy_data:
+  caddy_config:
+  alloy_data:
