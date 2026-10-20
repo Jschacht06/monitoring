@@ -147,6 +147,77 @@ With verification off, an **expired** certificate no longer fails the probe, so 
 
 To require exactly HTTP 200, or to make sure plain HTTP is never accepted, add a stricter module. See [configuration-reference.md](configuration-reference.md#adding-a-module).
 
+### Temporary public HTTPS test
+
+If the homelab has no HTTPS service, use `https://prometheus.io/` for a short certificate-monitoring test. The [official Blackbox tutorial](https://prometheus.io/docs/guides/multi-target-exporter/) uses the Prometheus website as a demo target and shows its certificate-expiry metric. This tests your monitoring path; it is not evidence of monitoring an actual school service.
+
+On noc-core, create `/opt/monitoring/prometheus/targets/https-test.yml` with this content:
+
+```yaml
+- targets:
+    - https://prometheus.io/
+  labels:
+    module: http_2xx
+    group: testing
+    service: public-https-test
+    host: prometheus.io
+    owner: '<your monitoring operator>'
+    contact: '<your contact address>'
+    dependencies: 'external:dns; external:internet'
+```
+
+Replace the owner/contact placeholders with your own details: they identify the person responsible for this test check, not the administrator of the public website. The existing `http_2xx` module performs the HTTPS probe with certificate verification. No new module, scrape job or restart is needed. Allow approximately one minute for target discovery plus the next scrape.
+
+In Grafana Explore, select Prometheus and run these as Instant queries:
+
+```promql
+probe_success{job="blackbox",group="testing",service="public-https-test"}
+```
+
+Expect `1` if the remote exporter can reach the site and the check passes.
+
+```promql
+(probe_ssl_earliest_cert_expiry{job="blackbox",group="testing",service="public-https-test"} - time()) / 86400
+```
+
+This returns days remaining until the earliest certificate expiry reported by the probe. Read the observed value; certificates renew, so do not record a fixed expected number of days. This confirms metric collection, not that the warning/critical notification path has been tested.
+
+Select group `testing` (or All) on the health dashboard to include this target. If the check fails, inspect DNS/outbound HTTPS connectivity and the probe error; keep certificate verification enabled. The certificate-expiry table is a separate panel and must exist before it can display this measurement.
+
+#### If the public HTTPS probe reports IPv6 "network is unreachable"
+
+**Encountered and resolved in the homelab on 16 October 2026.** The public HTTPS target returned `probe_success=0`; Blackbox debug logs showed `dial tcp [2606:...]:443: connect: network is unreachable`. The operator confirmed the probe worked after adding `preferred_ip_protocol: ip4` to the existing `http_2xx` module and applying the change.
+
+The error means the exporter selected an IPv6 destination but could not route to it. The connection failed before it could test the remote certificate. The steps below record the confirmed fix.
+
+For a monitoring deployment using IPv4, edit the existing `http_2xx` module in `blackbox/blackbox.yml`:
+
+```yaml
+modules:
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+```
+
+Keep the other modules. If this module already has an `http:` block, add the preference inside that block rather than creating a second one. This changes the IP-family preference for every target using `http_2xx`; it leaves TLS verification enabled. Choose the family according to the deployment network, rather than assuming the homelab and school have identical IPv6 connectivity. Other modules are independent.
+
+Validate the changed configuration, continue only on success, then restart Blackbox:
+
+```bash
+cd /opt/monitoring
+docker compose exec blackbox blackbox_exporter --config.check --config.file=/etc/blackbox/blackbox.yml
+docker compose restart blackbox
+```
+
+Wait for the next scrape, then rerun `probe_success{service="public-https-test"}`. Check `probe_ip_protocol{service="public-https-test"}`: an IPv4 probe reports `4`. A successful HTTPS probe should then provide its certificate-expiry metric. If it still fails, inspect the latest debug error before changing further settings.
+
+Blackbox makes one connection attempt; its default IP-family fallback is address selection, not a second connection attempt after an IPv6 route failure. See the [official address-selection documentation](https://github.com/prometheus/blackbox_exporter/blob/v0.28.0/CONFIGURATION.md#address-selection).
+
+Remove this temporary target entry/file when the demonstration is complete. No public probe is enabled by the repository templates; use agreed project targets for the school deployment.
+
+
 ### Application check (the answer must prove the app works)
 
 `http_2xx` only proves that something answered with a 2xx status. Many apps answer 200 while a part of them is broken. A module with `fail_if_body_not_matches_regexp` also checks the body. The repo has one example, `http_grafana_health`, which needs HTTP 200 and `"database": "ok"` in Grafana's health endpoint:

@@ -60,14 +60,16 @@ Tested end to end:
 - **Alert `CertificateExpiringSoon`** (warning): an HTTPS certificate expires within 14 days. Tested by flipping the threshold, with firing and resolved emails.
 - **Flip test**: a way to prove an alert end to end without breaking anything, see [docs/how-to-guides.md](docs/how-to-guides.md#test-an-alert-by-flipping-its-condition).
 - **Grafana** with Prometheus as a data source (added by hand).
+- **HTTPS certificate display**: the operator confirmed the manually configured certificate-days panel works in the homelab on 16 October 2026. The public HTTPS probe initially failed because of missing IPv6 routing; preferring IPv4 fixed it ([recorded issue and fix](docs/adding-targets.md#if-the-public-https-probe-reports-ipv6-network-is-unreachable)). This is display/metric verification, not a critical-certificate notification test.
 - **Service catalogue documentation and dashboard template**: ownership, contacts and dependencies; see [grafana/docs/service-catalogue.md](grafana/docs/service-catalogue.md).
+- **Grafana service-list/health validation**: homelab Down/recovery, Unknown, latency and Viewer access checked; dashboard-only restore to a separate Grafana operator-confirmed in approximately 10 minutes, without restore screenshots. Start with [Grafana documentation](grafana/docs/README.md); see the [test report and requirements review](grafana/docs/service-health-tests.md). Smith and full-stack/data restore remain separate.
 
 Written but not tested:
 
 - **Alert `CertificateExpiryCritical`** (critical): a certificate expires within 3 days or has expired. Its flip test is pending.
 - **Alert `DiskWillFillSoon`** (warning): a linear forecast says the disk is full within 24 hours. It needs hours of real disk growth to test, so it has not fired yet.
 - **Alert `DriveDisappeared`** (critical): a drive that reported SMART data 24 hours ago and does not now. A real test needs a drive to be unplugged.
-- **Health/resource dashboard guides and templates**: a next-step implementation guide, two manual-import dashboards and proposed Smith API/resource-budget rules. They have not been imported or tested on the running school/home environment; see [grafana/docs/health-and-usage-dashboards.md](grafana/docs/health-and-usage-dashboards.md).
+- **Fresh health-template import and Smith resources**: the health template includes the manually verified certificate panel, but a fresh import of the complete updated template still needs acceptance checks. The Smith resource dashboard and proposed API/resource-budget rules remain pending live verification; see [grafana/docs/health-and-usage-dashboards.md](grafana/docs/health-and-usage-dashboards.md).
 
 Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tried on this setup yet are marked **Untested** there.
 
@@ -76,7 +78,7 @@ Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tri
 - Loki for logs
 - Public or internal status page
 - Grafana dashboards as code (provisioning)
-- Backup and restore of Prometheus, Grafana and Alertmanager data
+- Full-stack/data backup and restore of Prometheus, Grafana and Alertmanager; dashboard JSON restore is recorded separately above
 - Automated deployment with Ansible/Terraform
 
 ## Quick start
@@ -150,6 +152,7 @@ The quick start does not add any probe targets yet. Add your first target file a
 | [docs/how-to-guides.md](docs/how-to-guides.md) | Change thresholds, routing, inhibition, silences, escalation, receivers or secrets |
 | [docs/operations-and-troubleshooting.md](docs/operations-and-troubleshooting.md) | Run the stack day to day and fix common problems |
 | [docs/README.md](docs/README.md) | Find all monitoring and service catalogue guides |
+| [grafana/docs/README.md](grafana/docs/README.md) | Follow the integrated Grafana setup, validation, operator-access and dashboard-restore route |
 | [grafana/docs/service-catalogue.md](grafana/docs/service-catalogue.md) | Add ownership, contacts and dependencies to the Grafana service catalogue |
 | [grafana/docs/service-catalogue-dashboard.md](grafana/docs/service-catalogue-dashboard.md) | Create, edit, export and import the catalogue dashboard |
 | [grafana/dashboard-template.json](grafana/dashboard-template.json) | Start from the Grafana catalogue dashboard template |

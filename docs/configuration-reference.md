@@ -263,7 +263,7 @@ Add a module under `modules:`, then restart Blackbox (see [operations](operation
       preferred_ip_protocol: ip4
 ```
 
-Then use `module: https_200` or `module: tcp_tls` in a target file. Note that `ServiceSlow` only watches `module="http_2xx"`. If you want slowness alerts for a new HTTP module too, change its expression (see [how-to-guides.md](how-to-guides.md#change-an-alert-threshold-or-for-duration)).
+Then use `module: https_200` or `module: tcp_tls` in a target file. The current `ServiceSlow` rule and health-dashboard latency panel match `module=~"http_.*"`. The example name `https_200` does not match that prefix: either name that new HTTP module `http_https_200` in both its definition and target file, or deliberately extend both selectors. TCP modules are excluded. See [the chart/alert coverage check](how-to-guides.md#keep-http-latency-charts-and-alerts-aligned).
 
 Validate before restarting:
 

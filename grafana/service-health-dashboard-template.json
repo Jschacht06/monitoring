@@ -120,42 +120,6 @@
         ],
         "hide": 2,
         "description": "Maximum accepted up/probe sample age in seconds, exclusive. Default90 assumes30s scrapes; choose a tolerance longer than normal scrape completion/jitter."
-      },
-      {
-        "name": "probe_interval_s",
-        "type": "constant",
-        "query": "30",
-        "current": {
-          "text": "30",
-          "value": "30"
-        },
-        "options": [
-          {
-            "text": "30",
-            "value": "30",
-            "selected": true
-          }
-        ],
-        "hide": 2,
-        "description": "Actual Blackbox scrape interval in seconds. Used only for coverage. Also set the status-history Min interval and the Prometheus datasource Scrape interval."
-      },
-      {
-        "name": "probe_freshness_s",
-        "type": "constant",
-        "query": "90",
-        "current": {
-          "text": "90",
-          "value": "90"
-        },
-        "options": [
-          {
-            "text": "90",
-            "value": "90",
-            "selected": true
-          }
-        ],
-        "hide": 2,
-        "description": "Maximum accepted up/probe sample age in seconds, exclusive. Default90 assumes30s scrapes; choose a tolerance longer than normal scrape completion/jitter."
       }
     ]
   },
@@ -644,7 +608,7 @@
       "id": 6,
       "title": "Successful HTTP probe duration",
       "type": "timeseries",
-      "description": "Total successful HTTP probe duration in seconds, filtered to fresh successful scrapes/probes. Includes connection/TLS work. Failures create gaps.1s is a suggested threshold; verify the actual ServiceSlow rule.",
+      "description": "Total successful HTTP probe duration in seconds for modules named http_*. Filtered to fresh successful scrapes/probes. Includes connection/TLS work; failures create gaps. The 1s reference line must be checked against the agreed threshold and loaded ServiceSlow rule.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -662,7 +626,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(\n  probe_duration_seconds{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"}\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_duration_seconds{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=\"http_2xx\"}) < $probe_freshness_s)\n)",
+          "expr": "(\n  probe_duration_seconds{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=~\"http_.*\"}\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=~\"http_.*\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=~\"http_.*\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_duration_seconds{job=\"blackbox\",group=~\"$group\",service=~\"$service\",module=~\"http_.*\"}) < $probe_freshness_s)\n)",
           "refId": "A",
           "format": "time_series",
           "instant": false,
@@ -899,6 +863,154 @@
         "graphMode": "none",
         "justifyMode": "auto"
       }
+    },
+    {
+      "id": 9,
+      "title": "HTTPS certificate days remaining",
+      "type": "table",
+      "description": "Days until the earliest certificate expiry reported by each selected Blackbox probe. Requires a fresh successful scrape and fresh positive expiry metric, not probe_success=1. HTTP-only targets are not applicable. Missing data for an expected HTTPS check requires investigation; compare with the agreed HTTPS inventory. Negative days indicate expiry. Colours: below 3 red, 3 to below 14 orange, 14 or more green.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  (probe_ssl_earliest_cert_expiry{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} - time()) / 86400\n)\nand on(job,instance,module,group,service,host,owner,contact,dependencies)\n(probe_ssl_earliest_cert_expiry{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} > 0)\nand on(job,instance,module,group,service,host,owner,contact,dependencies)\n(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"} == 1)\nand on(job,instance,module,group,service,host,owner,contact,dependencies)\n(time() - timestamp(up{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)\nand on(job,instance,module,group,service,host,owner,contact,dependencies)\n(time() - timestamp(probe_ssl_earliest_cert_expiry{job=\"blackbox\",group=~\"$group\",service=~\"$service\"}) < $probe_freshness_s)",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Days remaining"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "d"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "noValue",
+                "value": "Unknown"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    },
+                    {
+                      "color": "green",
+                      "value": 14
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Days remaining",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "contact": true,
+              "dependencies": true
+            },
+            "indexByName": {
+              "group": 0,
+              "service": 1,
+              "host": 2,
+              "module": 3,
+              "instance": 4,
+              "Value": 5
+            },
+            "renameByName": {
+              "group": "Group",
+              "service": "Service",
+              "host": "Host",
+              "module": "Check",
+              "instance": "Target",
+              "Value": "Days remaining"
+            }
+          }
+        }
+      ]
     }
   ]
 }

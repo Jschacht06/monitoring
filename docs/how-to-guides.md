@@ -11,6 +11,7 @@ Most `amtool` commands need the Alertmanager address. Inside the container, that
 Contents:
 
 - [Change an alert threshold or "for" duration](#change-an-alert-threshold-or-for-duration)
+- [Keep HTTP latency charts and alerts aligned](#keep-http-latency-charts-and-alerts-aligned)
 - [Add a new alert rule](#add-a-new-alert-rule)
 - [Change routing and timings per severity](#change-routing-and-timings-per-severity)
 - [Add or change an inhibit rule](#add-or-change-an-inhibit-rule)
@@ -50,7 +51,7 @@ Example: make `ServiceSlow` fire at 2 seconds instead of 1, after 10 minutes ins
 
 ```yaml
       - alert: ServiceSlow
-        expr: probe_duration_seconds{module="http_2xx"} > 2 and on(instance, module) probe_success == 1
+        expr: probe_duration_seconds{module=~"http_.*"} > 2 and on(instance, module) probe_success == 1
         for: 10m
 ```
 
@@ -78,6 +79,36 @@ Prometheus reads rule files only at startup, so the restart is needed.
 **3. Verify:** open `http://<noc-core-ip>:9090/alerts` and expand the rule. The expression and `for` value shown there should be your new ones.
 
 **Testing a threshold:** to see an alert fire without breaking anything, temporarily make it very sensitive, for example `> 0.001` and `for: 1m` for `ServiceSlow`, or `< 0.99` and `for: 1m` for `DiskSpaceLow`. Restart, wait for Pending → Firing and the email, then **put the real values back** and restart again. Test values left in place make the alert fire constantly and turn it into noise.
+
+---
+
+## Keep HTTP latency charts and alerts aligned
+
+The health dashboard's **Successful HTTP probe duration** panel and the current `ServiceSlow` rule both select `module=~"http_.*"`. This includes the project's `http_2xx`, `http_2xx_insecure` and `http_grafana_health` modules. Keep the `http_` prefix when defining additional HTTP modules, or deliberately extend both selectors for other names.
+
+This is an alert/configuration check, separate from editing a Grafana panel:
+
+1. Inspect the loaded `ServiceSlow` rule on Prometheus's **Alerts** or **Rules** page, or inspect `prometheus/rules/alerts.yml` on noc-core. The current rule is:
+
+```promql
+probe_duration_seconds{module=~"http_.*"} > 1 and on(instance, module) probe_success == 1
+```
+
+2. If that selector is already present and its threshold/duration match the owners' agreement, leave the rule unchanged. The repository default is more than 1 second for 5 minutes; the dashboard's 1-second line is a display reference, not an alert rule.
+3. Only for an older deployed rule restricted to `module="http_2xx"`, replace that selector with `module=~"http_.*"`. Preserve the success condition, annotations, severity and agreed threshold/duration. No new alert rule is needed.
+4. If you edited a rule file, validate it, continue only on success, then restart Prometheus:
+
+```bash
+cd /opt/monitoring
+docker compose exec prometheus promtool check rules /etc/prometheus/rules/alerts.yml
+docker compose restart prometheus
+```
+
+5. Verify the loaded expression and duration in Prometheus. If no file changed, no restart is needed.
+
+Changing a Grafana query does not change alerting. The latency chart also applies scrape-health and sample-age checks; its extra display safeguards are not automatically copied into the alert expression. Check the live rule before claiming chart and alert behaviour are identical. An actual delayed response test is needed to demonstrate degradation; a threshold flip only tests rule/notification routing.
+
+For changing an agreed threshold or duration, use [the threshold recipe](#change-an-alert-threshold-or-for-duration). For panel editing/import, use [the health dashboard guide](../grafana/docs/health-and-usage-dashboards.md#6-understand-or-build-the-trend-panels).
 
 ---
 

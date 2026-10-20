@@ -12,6 +12,10 @@ Guides for the noc-core monitoring stack, Grafana service catalogue, health dash
 | [how-to-guides.md](how-to-guides.md) | Change alerts, routing, inhibition, receivers and exporters. |
 | [operations-and-troubleshooting.md](operations-and-troubleshooting.md) | Daily commands, applying changes and diagnosing problems. |
 
+## Grafana documentation
+
+Start with the [Grafana documentation index](../grafana/docs/README.md) for the complete service-list/health setup route, validated tests, operator access, backup and restore.
+
 ## Service catalogue
 
 | Guide | What it covers |
@@ -27,9 +31,10 @@ Continue here after the service catalogue works. The health dashboard uses exist
 | Guide or template | What it covers |
 |---|---|
 | [health-and-usage-dashboards.md](../grafana/docs/health-and-usage-dashboards.md) | Numbered dashboard setup, filters, panel queries/settings, interpretation, acceptance evidence, export and troubleshooting. |
+| [service-health-tests.md](../grafana/docs/service-health-tests.md) | Homelab test report, Viewer verification, approximately 10-minute dashboard restore and teacher-requirements review. |
 | [smith-resource-metrics.md](../grafana/docs/smith-resource-metrics.md) | Proposed read-only Proxmox API integration, guest/group mapping, approved budgets, complete allocation totals and validation. |
-| [service-health-dashboard-template.json](../grafana/service-health-dashboard-template.json) | Importable health, status-history, latency, observed-availability and sample-coverage panels. |
+| [service-health-dashboard-template.json](../grafana/service-health-dashboard-template.json) | Importable health, status-history, latency, observed-availability, sample-coverage and HTTPS certificate-expiry panels. |
 | [smith-resources-dashboard-template.json](../grafana/smith-resources-dashboard-template.json) | Importable allocation/budget bars, CPU/memory/disk trends, guest inventory and missing-data indicators. |
 | [smith-resource-rules-template.yml](../grafana/docs/smith-resource-rules-template.yml) | Placeholder rules to copy, customize and validate; not loaded from the docs folders. |
 
-**Deployment status:** the new guides/templates have not been validated on the running Grafana/Smith environment. Keep pending API access and acceptance checks visible; these files do not deploy the dashboards or collector automatically.
+**Deployment status — 16 October 2026:** the service-list and health-dashboard homelab checks and Viewer access passed; separate-Grafana dashboard restore was operator-confirmed in approximately 10 minutes, without screenshots. Repository templates are structurally checked, while a fresh live import of those placeholder templates and school coverage remain separate. Smith API/resource acceptance and full-stack configuration/rule/catalogue restore remain pending. See the [report](../grafana/docs/service-health-tests.md).

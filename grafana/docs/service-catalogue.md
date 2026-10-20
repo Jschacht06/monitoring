@@ -2,7 +2,7 @@
 
 This guide continues the installation in [setup.md](../../docs/setup.md), adding a Grafana dashboard that lists currently discovered scrape targets by service, with their owner, dependencies and contact person. Each step ends with a check that tells you what you should see before you continue.
 
-**Review scope (14 October 2026):** the catalogue queries and workflow were checked against official documentation. The supporting setup/configuration guides are supplied unchanged as context. Their installed versions, live service count, target addresses, alerts and previous test results have not been independently verified. Run the checks below on the recipient's installation before signing it off. The package is an addition to the monitoring stack; the dashboard JSON does not install that stack.
+**Status — 16 October 2026:** catalogue and health behaviour were verified in the homelab, and the operator confirmed successful dashboard export/restore on a separate Grafana in approximately 10 minutes. See the [Grafana documentation index](README.md) and [test report](service-health-tests.md). School service coverage and owner agreements still need deployment-specific evidence. The dashboard JSON does not install the monitoring stack.
 
 All commands run as root inside the Debian 13 LXC, from the stack folder:
 
@@ -24,6 +24,23 @@ Placeholders used in this guide:
 | `<school-host>` | Reachable IP address or hostname of a school server |
 
 ---
+
+## Agree the monitored services
+
+Before configuring school targets, record an intake with at least three project groups. Homelab categories such as gaming or monitoring do not demonstrate those school-group agreements. Keep the signed-off list with the project evidence.
+
+| Record per service | What to agree |
+|---|---|
+| Identity | Project group, service name and stable host identity |
+| Responsibility | Owner, real contact role/channel and escalation contact |
+| Dependencies | Monitored service IDs as group/service@host; otherwise external:name |
+| Reachability | Permitted URL/port/protocol and the network location of the probe |
+| Application health | Endpoint and expected status/body or function, approved by the owner |
+| SLI and threshold | What is measured, acceptable response time and agreed detection/notification time |
+| Maintenance | Timezone, planned window, owner and existing silence procedure |
+| Access | Approval for probes and any optional host/agent/API metrics; least-privilege credentials |
+
+Use the same identity and metadata on every check for one service. Keep maintenance and SLI explanations in the intake record rather than long metric labels. A success count alone cannot detect a service that was never configured; reconcile the target list against this agreement.
 
 ## 1. Prerequisites
 
@@ -68,7 +85,7 @@ Verify the active `blackbox` job in `prometheus/prometheus.yml` before adding ta
         replacement: blackbox:9115
 ```
 
-This requires the host `prometheus` folder to be mounted at `/etc/prometheus` in the Prometheus container. Keep existing rules, other jobs and any intentional additional relabeling. The `http_2xx`, `tcp_connect` and `icmp` modules must exist in the active `blackbox/blackbox.yml`. A module name is a local recipe name; its behavior depends on that recipe. The supplied reference describes HTTP/TCP/ICMP probers with 5-second timeouts, leaving time within the 10-second scrape timeout. See [the Blackbox exporter scrape pattern](https://github.com/prometheus/blackbox_exporter#prometheus-configuration) and [file discovery configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
+This requires the host `prometheus` folder to be mounted at `/etc/prometheus` in the Prometheus container. Keep existing rules, other jobs and any intentional additional relabeling. Every module referenced by an enabled target must exist in the active `blackbox/blackbox.yml`. Reuse `http_2xx` for ordinary HTTP checks and `tcp_connect` for TCP. ICMP is optional and requires its own configured module; the current tracked Blackbox configuration does not define `icmp`. An unknown module makes the probe scrape fail even when the destination works. A module name is a local recipe name; its behavior depends on that recipe. The supplied reference describes HTTP/TCP/ICMP probers with 5-second timeouts, leaving time within the 10-second scrape timeout. See [the Blackbox exporter scrape pattern](https://github.com/prometheus/blackbox_exporter#prometheus-configuration) and [file discovery configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
 
 If you change the main job, validate and reload it as in steps 4–5. File discovery only applies automatically when this job is active and can read the matching files.
 
@@ -195,6 +212,32 @@ Use the service's actual port and path. For HTTPS, use `https://` and the correc
 
 With the basic `tcp_connect` recipe shown in the supporting reference, this proves that the TCP port accepts a connection. It does not test a login or the whole application protocol. HTTP recipes can also follow redirects; a 2xx login page can pass a simple HTTP probe, so verify what the final response actually checks. See [Blackbox module settings](https://github.com/prometheus/blackbox_exporter/blob/master/CONFIGURATION.md).
 
+### Agreed application-content checks
+
+The basic http_2xx module is sufficient for HTTP reachability. It does not require a new module for Grafana unless the agreed check also validates its response body. A login page returning HTTP 200 can pass a reachability probe while useful application functions are broken.
+
+The tracked Blackbox configuration includes http_grafana_health, which checks HTTP 200 and a body matching "database": "ok". Use it only when it is present in the running exporter and this is the intended Grafana health contract. The homelab used http_2xx for its baseline Grafana check after encountering a missing custom module. A recipe being present in Git does not prove it is loaded on the destination machine.
+
+For another service, agree its health response with the owner and reuse a matching module or add a dedicated HTTP recipe. For example, an application whose documented healthy response includes "status": "ok" could use:
+
+```yaml
+  http_app_health:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - '"status":\s*"ok"'
+```
+
+Add that recipe under the existing modules mapping, preserve other recipes, and point only the matching application target at it. A response-content check is not a complete synthetic user transaction. Validate the live configuration before applying a module change:
+
+```bash
+docker compose exec blackbox blackbox_exporter --config.check --config.file=/etc/blackbox/blackbox.yml
+```
+
+Only after validation succeeds, apply the change using the [existing operations procedure](../../docs/operations-and-troubleshooting.md#how-to-apply-a-change). Target-file-only changes need no restart. The [HTTPS test and IPv4 routing fix](../../docs/adding-targets.md#temporary-public-https-test) remain in the target guide; do not disable TLS verification just to work around a routing fault.
+
 ### Host with ICMP
 
 ```yaml
@@ -210,7 +253,7 @@ With the basic `tcp_connect` recipe shown in the supporting reference, this prov
     dependencies: '<dependencies>'
 ```
 
-> **Only add ICMP for hosts that reliably answer ping.** The existing inhibit rule suppresses HTTP ServiceDown alerts while the same host's ICMP ServiceDown alert is firing. Check the ping result before relying on it. See [combining ICMP and HTTP](../../docs/adding-targets.md#combining-icmp-and-http-for-one-host).
+> **Only add ICMP for hosts that reliably answer ping and have a configured ICMP module.** If the loaded Alertmanager configuration includes ICMP/HTTP inhibition, it can suppress HTTP ServiceDown alerts while the same host's ICMP ServiceDown alert is firing. Check the active rule and ping result before relying on it. See [multiple checks for one machine](../../docs/adding-targets.md#several-checks-for-one-machine).
 
 That inhibition behavior is described by the supplied reference; it depends on the Alertmanager configuration actually loaded. ICMP also needs appropriate privileges in the exporter environment. On Linux this can be an allowed ping group, `CAP_NET_RAW` or root; nested LXC/container restrictions can still prevent probing. Confirm an ICMP result of `1` before using it for inhibition. See [Blackbox ICMP permissions](https://github.com/prometheus/blackbox_exporter#permissions).
 
@@ -364,15 +407,16 @@ Follow this sequence in the dashboard guide:
 
 The same guide also explains how to create the panels manually in Grafana and export an existing dashboard for another LXC. If the catalogue already exists on this instance, open it and verify the panels below.
 
-**Check:** the dashboard opens with three full-width panels, from top to bottom:
+**Check:** the dashboard opens with four full-width panels, from top to bottom. The template includes the status query, column headings and coloured mappings; no manual formatting is needed:
 
 | Panel | What it shows | Expected result |
 |---|---|---|
+| Current service probe status | Group, service, host, check, target, owner, contact, dependencies and Up/Down/Unknown status | One row per configured destination probe; healthy checks are green |
 | Every monitored service | Group, service, host, owner, contact person, dependencies and check count | One row per service instance |
 | Services with incomplete catalogue metadata | Number of service instances with at least one incomplete check | `0` after the labels are complete |
 | Services missing catalogue metadata | Affected service instances and their incomplete-check counts | One row per affected service; empty when the counter is 0 |
 
-With only the two NOC probes and the two original internal scrapes, you should see three service rows: `prometheus` with 2 checks, `grafana` with 1, and `node-exporter` with 1. School targets add their own rows. The missing-metadata counter counts each affected `(group, service, host)` once, and its value matches the number of rows in the bottom table. An empty bottom table is expected when all labels are complete.
+With only the two NOC probes and the two original internal scrapes, the status table shows two probe rows. The inventory table should show three service rows: `prometheus` with 2 checks, `grafana` with 1, and `node-exporter` with 1. School targets add their own rows. The missing-metadata counter counts each affected `(group, service, host)` once, and its value matches the number of rows in the bottom table. An empty bottom table is expected when all labels are complete.
 
 ---
 
@@ -438,7 +482,7 @@ count by (group, service, host) (
 
 ### Coverage
 
-Compare the intended school-service list with *Status → Target health* and the catalogue. The **Checks** values in the top **Every monitored service** table should add up to the number of series returned by:
+Compare the intended school-service list with *Status → Target health* and the catalogue. The **Checks** values in the **Every monitored service** inventory table should add up to the number of series returned by:
 
 ```promql
 count(up)

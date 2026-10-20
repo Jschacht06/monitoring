@@ -2,7 +2,7 @@
 
 This guide continues from the working [service catalogue](service-catalogue.md). Keep that dashboard as the ownership and dependency list. Add two dashboards for the next project milestone: service health over time, and Smith resource usage compared with approved budgets. Each step ends with a check before you continue.
 
-**Status:** reviewed against official Grafana, Prometheus and exporter documentation on 14 October 2026. These are dashboard instructions for an existing monitoring stack, not a replacement installation. Live imports, permissions, target coverage and failure/recovery still require the acceptance checks below. The supplied setup guides already describe `pve-exporter`; [smith-resource-metrics.md](smith-resource-metrics.md) checks and extends that integration without creating a duplicate collector. Manual JSON import/export is covered here.
+**Status — 16 October 2026:** the service-list and service-health implementation is complete for the tested homelab scope. Down/recovery, Unknown, slow-response display and Viewer access were verified with supplied evidence; dashboard restore to a separate Grafana was operator-confirmed in approximately 10 minutes, without restore screenshots. See the [test report](service-health-tests.md) and [setup route](README.md). School coverage, agreed application checks and full-stack restore remain separate requirements. Smith metrics, quotas and resource trends are deferred. The supplied setup already describes pve-exporter; the Smith guide extends that integration without requiring another collector.
 
 | Dashboard | Questions it answers | Data needed |
 |---|---|---|
@@ -10,11 +10,11 @@ This guide continues from the working [service catalogue](service-catalogue.md).
 | Service health and trends (new) | Which check fails, is the check itself working, how has health/latency changed? | Existing Blackbox probes and `up` |
 | Smith resources and budgets (new) | How much is allocated, how much is used, how close is each group to its approved budget? | Approved Proxmox API metrics, guest inventory and group budgets |
 
-The health dashboard can be built once the existing stack and Blackbox targets pass step 1. The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
+The health dashboard can be built once the existing stack and Blackbox targets pass step 1. Its certificate panel also needs at least one HTTPS target; HTTP-only checks have no certificate metrics. The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
 
 Commands in this guide run inside noc-core from `/opt/monitoring`. Dashboard JSON files are edited on your own computer and uploaded through Grafana, just like the catalogue template. They do not need to be stored on the LXC.
 
-**Choose your route:** importing the template in step 3 creates all eight health panels, including their queries and display settings. After checking the filters in step 4, use steps 5 and 6 as reference and complete only their final **Check** paragraphs. Follow their panel-creation instructions only if you are building manually or correcting a missing/incorrect panel. Then continue to step 7 for the additional Smith resource metrics.
+**Choose your route:** importing the template in step 3 creates all nine health panels, including their queries and display settings. After checking the filters in step 4, use steps 5 and 6 as reference and complete only their final **Check** paragraphs. Follow their panel-creation instructions only if you are building manually or correcting a missing/incorrect panel. For service-health work, skip the deferred Smith sections 7–9 and continue to step 10 for acceptance, operator access and restore. Resume step 7 when Smith resource work is authorized.
 
 ---
 
@@ -33,7 +33,7 @@ probe_success{job="blackbox"}
 ```
 
 ```promql
-probe_duration_seconds{job="blackbox",module="http_2xx"}
+probe_duration_seconds{job="blackbox",module=~"http_.*"}
 ```
 
 `up=1` means Prometheus successfully scraped the Blackbox `/probe` response for that target; it does not prove the destination is healthy. `probe_success=1` means the configured probe passed from the exporter’s network location. A fresh `up=1, probe_success=0` means the configured check failed; this can reflect the destination, network, DNS, TLS or an incorrect check definition. `up=0`, a missing success metric or old samples means destination health is Unknown. A passed TCP connection or ping alone does not verify the application’s full function. See [Prometheus scrape metrics](https://prometheus.io/docs/concepts/jobs_instances/) and [Blackbox probe results](https://github.com/prometheus/blackbox_exporter#checking-the-results).
@@ -44,7 +44,7 @@ In Prometheus, check *Status → Configuration*, *Command-line flags* and *Targe
 
 The health template has two hidden **Constant** variables: `probe_interval_s=30` (coverage denominator) and `probe_freshness_s=90` (maximum accepted sample age, exclusive). Set the first to the verified interval in seconds; choose the second longer than normal scrape completion and jitter, typically three intervals for this stack. Also update the status-history **Min interval** separately if collection is not every 30s. One coverage constant assumes every selected check uses the same interval; split dashboards or adapt the coverage calculation if intervals differ. These display settings do not change Prometheus collection. See [Constant variables](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/add-template-variables/#add-a-constant-variable).
 
-**Check:** compare current `up{job="blackbox"}` with the agreed service/check list and the target files; no metric query can find a target that was never configured. Each expected probe needs `group`, `service`, `host`, `module`, `owner`, `contact` and `dependencies`. Confirm the `module` label matches the actual `?module=` relabeling and that `instance` is the destination, not `blackbox:9115`. The supplied [target guide](../../docs/adding-targets.md) describes this layout. An empty HTTP-duration query is expected if there are no `http_2xx` checks or all are failing; other HTTP module names require updating that panel’s selector.
+**Check:** compare current `up{job="blackbox"}` with the agreed service/check list and the target files; no metric query can find a target that was never configured. Each expected probe needs `group`, `service`, `host`, `module`, `owner`, `contact` and `dependencies`. Confirm the `module` label matches the actual `?module=` relabeling and that `instance` is the destination, not `blackbox:9115`. The supplied [target guide](../../docs/adding-targets.md) describes this layout. An empty HTTP-duration query is expected if there are no HTTP checks with module names starting `http_`, or all are failing. The current template includes all `http_.*` modules; other naming conventions require explicitly updating the panel selector.
 
 The joins below use `job,instance,module,group,service,host,owner,contact,dependencies`. Run this current query; it must return no rows:
 
@@ -60,20 +60,25 @@ If there are duplicates distinguished by another label, include that label consi
 
 ## 2. Preserve the catalogue and current configuration
 
-Export the catalogue using [the existing export procedure](service-catalogue-dashboard.md#5-export-a-dashboard-you-already-created). Keep its name and UID so you can restore that dashboard if needed.
+Export both the service list and health dashboard using [the existing export procedure](service-catalogue-dashboard.md#5-export-a-dashboard-you-already-created). Keep an original-UID copy for restoration and a portable copy for destination datasource mapping. Record their names/UIDs and the Prometheus datasource URL/UID. Keep complete exports private; a sanitized reusable template is a different artifact.
 
 Before editing the existing collector configuration or adding rules, take a local configuration backup:
 
 ```bash
 cd /opt/monitoring
+umask 077
 DASHBOARD_BACKUP="/opt/monitoring-dashboards-backup-$(date +%Y%m%d-%H%M%S)"
 install -d -m 700 "$DASHBOARD_BACKUP"
 cp -a compose.yaml prometheus "$DASHBOARD_BACKUP/"
 if [ -d pve ]; then cp -a pve "$DASHBOARD_BACKUP/"; fi
 if [ -d blackbox ]; then cp -a blackbox "$DASHBOARD_BACKUP/"; fi
+if [ -d alertmanager ]; then cp -a alertmanager "$DASHBOARD_BACKUP/"; fi
+if [ -f .env ]; then cp -a .env "$DASHBOARD_BACKUP/"; fi
 ```
 
-This backup contains private configuration and target labels. Keep it on the server with restricted access, outside Git. It is a configuration backup; a complete Grafana-volume restore remains a separate project task.
+This backup includes the actual ignored target files and configuration, not just Git templates. It can include credentials; keep it access-controlled and outside Git, with a separate protected copy off the monitored machine. A local folder alone does not protect against losing that machine. It is a configuration backup, not a Grafana database/volume or Prometheus data backup. No full configuration/rule/catalogue restore is claimed by the dashboard test.
+
+For dashboard backup and handover, record the owner, storage location, access controls, retention/cleanup policy, backup date and datasource mapping. Export after accepted dashboard changes. Agree the permitted loss of configuration changes (RPO) and recovery target (RTO); the observed approximately 10-minute homelab restore is a measurement, not an owner-approved RTO. Follow the [separate-instance restore procedure](service-catalogue-dashboard.md#9-verify-dashboard-restore-on-a-separate-grafana); see the [restore result](service-health-tests.md#dashboard-backup-and-restore).
 
 **Check:** you have the exported catalogue JSON and the backup folder. On an existing installation, edit your actual `compose.yaml` and `prometheus/prometheus.yml`; do not replace them with clean templates.
 
@@ -96,14 +101,14 @@ Status history uses separate cells. An explicit point setting requests a coarser
 
 1. Save a local copy named `service-health-dashboard.json`.
 2. Replace `<your dashboard title here>`, `<your description here>` and `<your environment tag here>`. Suggested title: **Service health and trends**; environment tag: `school` or `home-test`.
-3. Keep `id: null`, `uid: null` and every `${DS_PROMETHEUS}` reference. These create a new dashboard and let the import form select the destination source. Check the hidden Constant variables in the JSON against step 1 before import; edit their `query`, `current.text`, `current.value` and `options` value consistently, or adjust them afterward in Variables.
+3. Confirm the four variables are group, service, probe_interval_s and probe_freshness_s, with each name defined once. The current template is already cleaned up; remove duplicate definitions only from an older copy. Keep `id: null`, `uid: null` and every `${DS_PROMETHEUS}` reference. These create a new dashboard and let the import form select the destination source. Check the hidden Constant variables in the JSON against step 1 before import; edit their `query`, `current.text`, `current.value` and `options` value consistently, or adjust them afterward in Variables.
 4. In Grafana, go to *Dashboards → New → Import dashboard* and upload the complete local JSON file.
 5. Choose the project folder and the existing Prometheus source. Use a new UID; leave the catalogue's UID alone.
 6. Click **Import**, choose **All** for the filters, and set the time range to **Last 6 hours**, ending at **now**, with **30s** refresh.
 
 Import follows [Grafana's documented upload workflow](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/import-dashboards/). Keep the imported dashboard saved in Grafana. Saving it there does not update the local JSON file; export a new copy after later edits.
 
-**Check before continuing:** the dashboard shows three summary counters, a current-check table, a status history, latency, observed availability and sample coverage. Confirm the history displays colored cells without a point-limit error at **Last 6 hours**, then **Last 24 hours** and **Last 7 days**; a new installation will only show the history collected so far. Return to Last 6 hours and save the dashboard. No container restart is needed for an import.
+**Check before continuing:** the dashboard shows three summary counters, a current-check table, a status history, latency, observed availability, sample coverage and the HTTPS certificate table. The certificate table may show No data when no HTTPS targets exist; investigate missing results for expected HTTPS targets. Confirm the history displays colored cells without a point-limit error at **Last 6 hours**, then **Last 24 hours** and **Last 7 days**; a new installation will only show the history collected so far. Return to Last 6 hours and save the dashboard. No container restart is needed for an import.
 
 If you already imported an earlier copy, update the existing panel during this setup check:
 
@@ -264,20 +269,33 @@ Status history displays sampled values as colored cells; see [Grafana's status h
 
 For **Successful HTTP probe duration**:
 
+To edit the query on a dashboard that was imported earlier:
+
+1. Open the **Service health** dashboard.
+2. Find **Successful HTTP probe duration**.
+3. Hover over that panel, open its **⋮** menu and choose **Edit**. This opens the panel editor, rather than dashboard settings.
+4. In the query area, open **Queries** and select query **A**. In the newer editor, select the **A** card under **Queries & expressions**.
+5. Switch the Prometheus query editor from **Builder** to **Code**.
+6. In that query, replace all four occurrences of `module="http_2xx"` with `module=~"http_.*"`. Keep every success, scrape-health and freshness condition.
+7. Click **Run queries** or **Refresh**. Keep query type **Range**, result format **Time series**, unit seconds and the existing group/service filters.
+8. Return to the dashboard using **Back to dashboard** or **Apply**, then **Save** the dashboard.
+
+The current import template already has this query; a fresh import needs no manual query change. The selector matches HTTP modules named with the `http_` prefix, including `http_2xx`, `http_2xx_insecure` and `http_grafana_health`. If all current probes use `http_2xx`, the displayed results should stay the same. Other naming conventions require an explicit selector update.
+
 ```promql
 (
-  probe_duration_seconds{job="blackbox",group=~"$group",service=~"$service",module="http_2xx"}
-  and on(job,instance,module,group,service,host,owner,contact,dependencies) (probe_success{job="blackbox",group=~"$group",service=~"$service",module="http_2xx"} == 1)
+  probe_duration_seconds{job="blackbox",group=~"$group",service=~"$service",module=~"http_.*"}
+  and on(job,instance,module,group,service,host,owner,contact,dependencies) (probe_success{job="blackbox",group=~"$group",service=~"$service",module=~"http_.*"} == 1)
   and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job="blackbox",group=~"$group",service=~"$service"} == 1)
   and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
   and on(job,instance,module,group,service,host,owner,contact,dependencies)
-  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service",module="http_2xx"}) < $probe_freshness_s)
+  (time() - timestamp(probe_success{job="blackbox",group=~"$group",service=~"$service",module=~"http_.*"}) < $probe_freshness_s)
   and on(job,instance,module,group,service,host,owner,contact,dependencies)
-  (time() - timestamp(probe_duration_seconds{job="blackbox",group=~"$group",service=~"$service",module="http_2xx"}) < $probe_freshness_s)
+  (time() - timestamp(probe_duration_seconds{job="blackbox",group=~"$group",service=~"$service",module=~"http_.*"}) < $probe_freshness_s)
 )
 ```
 
-Set a visible threshold at **1 second**, matching `ServiceSlow` as described in the supplied configuration reference; verify the actual loaded rule before claiming the line matches alerting. This is total successful probe duration, including connection and TLS work, not an application response-time histogram. Failed, missing and old probe samples leave gaps.
+The template already has a visible reference line at **1 second**. Match it to the agreed threshold and verify the actual loaded `ServiceSlow` rule before claiming chart and alert alignment. The repository rule already includes `http_.*` modules; follow [the alert coverage check](../../docs/how-to-guides.md#keep-http-latency-charts-and-alerts-aligned) only when verifying or updating the deployed configuration. This is total successful probe duration, including connection and TLS work, not an application response-time histogram. Failed, missing and old probe samples leave gaps.
 
 For **Observed probe availability**, use an Instant query with one result per check:
 
@@ -303,6 +321,48 @@ Use legend `{{group}} / {{service}} @ {{host}} / {{module}} / {{instance}}` for 
 Availability is the **fraction of recorded samples that succeeded**, with each sample weighted equally. Missing samples are excluded. A visible check with no samples has Unknown availability and 0% coverage. A monitoring outage can therefore leave 100% availability with poor coverage; that is inconclusive. New targets, label changes, retention and monitoring gaps lower coverage for a longer view. Historical series with samples can remain in these period summaries after the target is removed. Neither panel is a verified monthly SLO or combined service SLI. See [Prometheus over-time functions](https://prometheus.io/docs/prometheus/latest/querying/functions/#aggregation_over_time).
 
 **Check:** change Last 6 hours to Last 24 hours and Last 7 days. Status history must render without a point-limit error in the normal dashboard view. The selected period changes the graphs and the availability window. Coverage exposes missing history. Metadata changes create separate series, so period summaries can show more than one line with the same displayed check name; do not combine their percentages as a service availability measure. Wait for real history before claiming a seven-day trend.
+
+---
+
+### HTTPS certificate expiry
+
+The health template includes **HTTPS certificate days remaining**, with its query, column order, days unit, one decimal and coloured numeric cells already configured. A fresh import requires no manual panel creation. For an older live dashboard, use **Edit → Add new element → Panel → Configure visualization**, choose the existing Prometheus data source and Table, then use the reference below.
+
+```promql
+(
+  (probe_ssl_earliest_cert_expiry{job="blackbox",group=~"$group",service=~"$service"} - time()) / 86400
+)
+and on(job,instance,module,group,service,host,owner,contact,dependencies)
+(probe_ssl_earliest_cert_expiry{job="blackbox",group=~"$group",service=~"$service"} > 0)
+and on(job,instance,module,group,service,host,owner,contact,dependencies)
+(up{job="blackbox",group=~"$group",service=~"$service"} == 1)
+and on(job,instance,module,group,service,host,owner,contact,dependencies)
+(time() - timestamp(up{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+and on(job,instance,module,group,service,host,owner,contact,dependencies)
+(time() - timestamp(probe_ssl_earliest_cert_expiry{job="blackbox",group=~"$group",service=~"$service"}) < $probe_freshness_s)
+```
+
+| Setting | Value |
+|---|---|
+| Query type / format | Instant / Table |
+| Visible fields | group, service, host, module, instance, Value |
+| Display names | Group, Service, Host, Check, Target, Days remaining |
+| Hidden fields, if present | Time, job, __name__, owner, contact, dependencies |
+| Override matcher | Fields with name: Days remaining |
+| Unit / decimals | Days / 1 |
+| No value / null mapping | Unknown / grey |
+| Thresholds on Days remaining only | Absolute: base red, 3 orange, 14 green |
+| Cell type on Days remaining only | Colored background |
+
+Keep negative values visible: they indicate an expired certificate. The query needs a fresh successful scrape and a recent positive expiry timestamp; it deliberately does not require `probe_success=1`, because an application check may fail while the exporter still observes its certificate.
+
+The table displays reported certificate metrics, not every expected HTTPS target. HTTP-only checks have no certificate expiry. An expected HTTPS target missing from the table needs investigation; an empty table does not establish healthy certificates. Compare the rows with the agreed HTTPS inventory. The 3/14-day colour boundaries correspond to the existing critical/warning rule thresholds, but panel colours do not implement the rules' waiting periods or send notifications.
+
+For a homelab without HTTPS services, use the [temporary public HTTPS example](../../docs/adding-targets.md#temporary-public-https-test). If its debug output reports an IPv6 `network is unreachable` error, follow the documented IP-family setting there.
+
+**Homelab confirmation — 16 October 2026:** the operator confirmed the manually configured certificate panel works after changing the existing `http_2xx` module to prefer IPv4. The original probe had selected an IPv6 destination with no working route. This confirms that live configuration and display; fresh import of the updated complete template, school deployment and critical-certificate notification testing remain separate checks.
+
+**Check:** select the HTTPS target's group/service and compare the panel's days remaining with the same query in Explore. Confirm the numeric cells have the expected colour and HTTP-only services are absent. Preserve evidence of the working display.
 
 ---
 
@@ -379,6 +439,10 @@ For an approved VM/guest exporter, replace `noc-core` with its exact `host` labe
 
 ## 10. Run the acceptance checks and collect evidence
 
+The [service-health dashboard test report](service-health-tests.md) records the completed homelab tests, Grafana observations and outcomes for Down/recovery, Unknown status, slow successful responses and HTTPS display. Notification routing and maintenance procedures remain in the [monitoring how-to guide](../../docs/how-to-guides.md).
+
+For the Viewer login and permission checks, follow [Verify the operator account](service-catalogue-dashboard.md#8-verify-the-operator-account). For dashboard export and a separate-instance restore test, follow [the Grafana restore procedure](service-catalogue-dashboard.md#9-verify-dashboard-restore-on-a-separate-grafana).
+
 Use a disposable service you control for failure tests. Agree the test window with its owner; the existing alert rules can send real emails. Stopping a production service or the shared exporter is unnecessary.
 
 | Scenario | Procedure | Expected result / evidence |
@@ -393,15 +457,15 @@ Use a disposable service you control for failure tests. Agree the test window wi
 | Missing guest | On a home/test setup, use a nonexistent ID in a temporary inventory entry and remove it afterward | Missing-metrics count increases; the affected group's live total becomes Unknown/No data |
 | Missing API | On a home/test setup, stop only `pve-exporter`, then start it | API health fails; live CPU/memory panels lose data after the failed scrape and next successful rule evaluation (or the source freshness deadline if scraping stops); disk inventory stays explicitly reviewed/static |
 | History | Review 6h, 24h and 7d as data accumulates; zoom to 15m for short failure tests | No point-limit error; sampled changes, gaps and coverage are visible; brief failures are checked at 30-second resolution; no claim of history before collection began |
-| Transfer/restore | Export Classic JSON with the external-sharing option, import on a test Grafana and select its source | The imported dashboards work with the destination's metrics; retain restore screenshots |
+| Transfer/restore | Export Classic JSON with the external-sharing option, import on a test Grafana and select its source | The imported dashboards work with the destination's metrics; record result, duration and screenshots/logs when available |
 
 For the invalid-module test, copy one complete disposable target block to a separate temporary target file, give it unique service/host labels and set `module: dashboard_test_invalid`. Do not edit `blackbox.yml` or existing targets. Remove that file after the test and verify discovery, counters and alerts return to their prior state. This exercises a failed probe scrape without interrupting every service check.
 
 Add two query-level checks: a visible target with no `probe_success` must be Unknown in the table, Unknown in availability and 0% in coverage; entirely absent `up` must produce No data/Unknown, never healthy zero. A test fixture or disposable test scrape can exercise these without stopping shared monitoring. Confirm the freshness boundary in a test source: retained samples at or above the configured age are Unknown.
 
-Capture the dashboard name, selected filters, visible time range, timestamp, expected/actual result and tester for each scenario. Keep a record of pending checks. Save sanitized screenshots with the project evidence; review internal addresses, contacts and dependency names before sharing outside the group.
+Capture the dashboard name, selected filters, visible time range, timestamp, expected/actual result and tester for each scenario. Keep a record of pending checks and identify operator-confirmed results when screenshots/logs were not collected. Save sanitized screenshots with the project evidence; review internal addresses, contacts and dependency names before sharing outside the group.
 
-**Check:** mark the dashboard milestone complete only after school service coverage, approved Smith resource scope, comparisons and restore checks pass. Local file validation alone does not prove deployment.
+**Check:** the tested homelab service-list and health-dashboard scope can be marked complete with the evidence in the report. School sign-off still requires the approved service coverage and application checks; Smith remains explicitly deferred. The teacher's broader milestone also requires configuration/rule/catalogue restore and the other NOC deliverables. Local template validation or restoring exported dashboard definitions alone does not prove those requirements.
 
 ---
 
@@ -422,7 +486,7 @@ Export each saved dashboard as **Classic JSON** with **Share dashboard with anot
 |---|---|---|
 | Many repeated table rows | Range/Both query | Use Instant + Table for current inventory/status |
 | Green count but blank status panels | Empty/mismatched filters, metric missing, wrong source | Query `up` and `probe_success`; reset filters to All; Unknown is not healthy |
-| Latency is empty while TCP checks work | No HTTP probes or every HTTP probe is failing | Verify `module="http_2xx"` and successful samples |
+| Latency is empty while TCP checks work | No matching HTTP probes or every HTTP probe is failing | Verify module names start with `http_` and successful samples exist |
 | Availability 100% with poor coverage | Missing scrape samples or a recently added target | Read status history and sample coverage before interpreting availability |
 | Smith panels say No data | Resource guide not applied, rules invalid, wrong case-sensitive node or missing rights | Query `up{job="pve"}`, `noc_pve_source_ready`, `pve_guest_info`, `noc_guest_info` and `noc_guest_scope` in order; then inspect diagnostic panels |
 | Resource totals too low | Unmapped/hidden guests, wrong scope or missing per-guest values | Check both coverage counters and compare the authorized API inventory with the agreed guest list |

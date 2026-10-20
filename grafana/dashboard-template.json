@@ -30,9 +30,171 @@
     "to": "now"
   },
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "probe_freshness_s",
+        "type": "constant",
+        "query": "90",
+        "current": {
+          "text": "90",
+          "value": "90"
+        },
+        "options": [
+          {
+            "text": "90",
+            "value": "90",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Maximum accepted scrape/probe sample age in seconds, exclusive. Default 90 assumes 30-second scrapes; match the health dashboard freshness tolerance."
+      }
+    ]
   },
   "panels": [
+    {
+      "id": 4,
+      "title": "Current service probe status",
+      "type": "table",
+      "description": "One row per current Blackbox destination probe. Up=1, Down=0, Unknown=-1. Known results require fresh successful scrapes and fresh probe results, using probe_freshness_s (default 90 seconds for 30-second scrapes). Scrape-only inventory entries have no destination status. Removed targets eventually disappear; compare with the agreed service list.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 11
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  probe_success{job=\"blackbox\"}\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (up{job=\"blackbox\"} == 1)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies) (time() - timestamp(up{job=\"blackbox\"}) < $probe_freshness_s)\n  and on(job,instance,module,group,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=\"blackbox\"}) < $probe_freshness_s)\n)\nor on(job,instance,module,group,service,host,owner,contact,dependencies)\n(-1 + 0 * up{job=\"blackbox\"})",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Down",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "Up",
+                        "color": "green"
+                      },
+                      "-1": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "noValue",
+                "value": "Unknown"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Group",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true
+            },
+            "indexByName": {
+              "group": 0,
+              "service": 1,
+              "host": 2,
+              "module": 3,
+              "instance": 4,
+              "owner": 5,
+              "contact": 6,
+              "dependencies": 7,
+              "Value": 8
+            },
+            "renameByName": {
+              "group": "Group",
+              "service": "Service",
+              "host": "Host",
+              "module": "Check",
+              "instance": "Target",
+              "owner": "Owner",
+              "contact": "Contact",
+              "dependencies": "Dependencies",
+              "Value": "Status"
+            }
+          }
+        }
+      ]
+    },
     {
       "id": 2,
       "title": "Every monitored service",
@@ -44,7 +206,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 11,
         "w": 24,
         "h": 12
       },
@@ -120,7 +282,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 23,
         "w": 24,
         "h": 4
       },
@@ -183,7 +345,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 27,
         "w": 24,
         "h": 10
       },
