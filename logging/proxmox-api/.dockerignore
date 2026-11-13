@@ -1,0 +1,7 @@
+secrets
+certs
+compose.yaml
+__pycache__
+test_collector.py
+.test-tmp
+*.md

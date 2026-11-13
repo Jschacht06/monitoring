@@ -11,6 +11,7 @@ Two log sources are set up:
 |---|---|
 | [architecture.md](architecture.md) | How the pieces fit together, what a tenant is, the labels, where every file lives and why. **Read this first.** |
 | [setup.md](setup.md) | Step by step from an empty Proxmox host to working logs, with a check after every step. |
+| [Proxmox API alternative](../proxmox-api/README.md) | Collect selected host journal units from a container on the logging LXC, without installing an agent on Proxmox. Requires API permission and live compatibility verification. |
 | [configuration-reference.md](configuration-reference.md) | Every setting in `loki.yml`, the Caddyfile, the compose files and the two Alloy configs. |
 | [operations-and-troubleshooting.md](operations-and-troubleshooting.md) | Daily commands, adding a tenant or a log source, changing passwords and retention, backup, upgrades, and a table of problems that really happened. |
 | [security.md](security.md) | Who can read what, how that is enforced, what is collected, and the known limits. |

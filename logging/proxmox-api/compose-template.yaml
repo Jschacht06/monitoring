@@ -1,0 +1,45 @@
+# Standalone project on the logging LXC. Copy to compose.yaml and fill placeholders.
+name: proxmox-log-api
+services:
+  proxmox-api:
+    build: .
+    restart: unless-stopped
+    environment:
+      PVE_URL: https://<proxmox-api-host>:8006
+      PVE_NODE: <proxmox-node>
+      # Set false explicitly to work without a Proxmox CA file (like curl --insecure).
+      # Traffic is encrypted, but the Proxmox server identity isn't verified.
+      PVE_TLS_VERIFY: "true"
+      LOGGING_URL: https://<logging-host-ip>
+      LOG_HOST: <proxmox-host-label>
+      LOG_OWNER: <owner-name>
+      POLL_SECONDS: "15"
+      INITIAL_LOOKBACK_SECONDS: "43200"
+    volumes:
+      - type: bind
+        source: ./secrets
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./certs
+        target: /etc/collector/certs
+        read_only: true
+        bind:
+          create_host_path: false
+      - collector_state:/var/lib/collector
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: [CMD, python, -B, /app/collector.py, --healthcheck]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+volumes:
+  collector_state:

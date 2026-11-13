@@ -327,6 +327,11 @@ curl -s --cacert alloy/logging-root.crt -u "noc:$(cat alloy/secrets/logging-pass
 
 ## 8. Alloy on the Proxmox host (systemd journal)
 
+**Alternative without installing on the host:** use the [Proxmox API collector](../proxmox-api/README.md)
+on the logging LXC. It requires administrator-granted API log access and a
+successful compatibility preflight. Choose one host-journal collector; running
+both methods can collect the same records twice. The noc-core Alloy stays in use.
+
 Run this on the Proxmox host as root.
 
 ### 8.1 Install the package

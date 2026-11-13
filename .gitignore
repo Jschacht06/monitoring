@@ -24,6 +24,11 @@ compose.yaml
 /alloy/secrets/*
 /alloy/logging-root.crt
 
+# Proxmox API collector: credentials, CA and environment-specific settings
+/logging/proxmox-api/secrets/
+/logging/proxmox-api/certs/
+
 # Private public-status mapping and local Python artifacts
 /status-page/services.json
 __pycache__/
+/logging/proxmox-api/.test-tmp/
