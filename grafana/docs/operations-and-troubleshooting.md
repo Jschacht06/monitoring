@@ -1,6 +1,6 @@
 # Grafana dashboard operations
 
-This guide covers the two final dashboards: **Host Systems and Disk Health** and **Proxmox VM and LXC Monitoring**. Use the [dashboard guide](../README.md) for import, filters and metric interpretation, and the [acceptance record](validation-and-acceptance.md) for the confirmed results.
+This guide covers the two final dashboards: **Host Systems and Disk Health** and **Proxmox VM and LXC Monitoring**. Use the [dashboard guide](../README.md) for import, filters and metric interpretation, and the [acceptance record](../README.md#validation-and-maintenance) for the confirmed results.
 
 ## Daily use
 

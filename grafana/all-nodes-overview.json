@@ -1,0 +1,854 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Select the existing Prometheus source used by Host Systems and Disk Health.",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "id": null,
+  "uid": null,
+  "title": "All Nodes Overview",
+  "version": 2,
+  "schemaVersion": 39,
+  "editable": true,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "description": "Core CPU, RAM, disk-space and network overview for configured Linux Node Exporter hosts. Excludes the noc-core monitoring-container target; discovers physical NICs without a device-name whitelist. Uses existing metrics only.",
+  "tags": [
+    "noc-monitoring",
+    "node-exporter",
+    "overview"
+  ],
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Monitoring dashboards",
+      "tags": [
+        "noc-monitoring"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "label": "Node Exporter job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "query_result(count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))",
+        "query": {
+          "query": "query_result(count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))",
+          "refId": "var-job"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": "/job=\"([^\"]+)\"/"
+      },
+      {
+        "name": "instance",
+        "label": "Node",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "query_result(count by(instance) (up{job=~\"$job\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))",
+        "query": {
+          "query": "query_result(count by(instance) (up{job=~\"$job\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))",
+          "refId": "var-instance"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": "/instance=\"([^\"]+)\"/"
+      },
+      {
+        "name": "network_devices",
+        "label": "Network interfaces",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "options": [],
+        "description": "Interface-name pattern. Leave .* for physical interfaces. To select a bridge/bond uplink, use Custom selection under Network view and choose that uplink here."
+      },
+      {
+        "name": "network_exclude",
+        "label": "Network view",
+        "type": "custom",
+        "query": "Physical interfaces : lo|veth.*|docker.*|br.*|virbr.*|vmbr.*|tap.*|fw.*|bond.*|tun.*|tailscale.*|cali.*|flannel.*|cni.*|VLAN.*|vlan.*|ln_.*|.*[.].*, Custom selection : lo",
+        "current": {
+          "text": "Physical interfaces",
+          "value": "lo|veth.*|docker.*|br.*|virbr.*|vmbr.*|tap.*|fw.*|bond.*|tun.*|tailscale.*|cali.*|flannel.*|cni.*|VLAN.*|vlan.*|ln_.*|.*[.].*"
+        },
+        "options": [
+          {
+            "text": "Physical interfaces",
+            "value": "lo|veth.*|docker.*|br.*|virbr.*|vmbr.*|tap.*|fw.*|bond.*|tun.*|tailscale.*|cali.*|flannel.*|cni.*|VLAN.*|vlan.*|ln_.*|.*[.].*",
+            "selected": true
+          },
+          {
+            "text": "Custom selection",
+            "value": "lo",
+            "selected": false
+          }
+        ],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "description": "Physical interfaces excludes common virtual-device names. Custom selection includes the interface pattern above except loopback; choose either physical members or their logical uplink, not both."
+      },
+      {
+        "name": "sample_freshness_s",
+        "type": "constant",
+        "query": "90",
+        "hide": 2,
+        "current": {
+          "text": "90",
+          "value": "90"
+        },
+        "options": [
+          {
+            "text": "90",
+            "value": "90",
+            "selected": true
+          }
+        ],
+        "description": "Maximum accepted scrape/metric sample age, exclusive. 90 seconds assumes 30-second scrapes."
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "All nodes",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Node metrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 24,
+        "h": 13
+      },
+      "description": "One row per configured Node Exporter host, excluding noc-core and its internal exporter target. CPU/RAM are used percentages; disk is the fullest eligible filesystem. Network sums the selected eligible interfaces. Missing values are N/A rather than zero.",
+      "targets": [
+        {
+          "refId": "STATE",
+          "expr": "label_join(((1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"})))))), \"node_key\", \" | \", \"job\", \"instance\")",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}}"
+        },
+        {
+          "refId": "CPU",
+          "expr": "max by(node_key) (label_join(((1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((clamp_max(clamp_min(100 * (1 - (avg by(job,instance) (rate(node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}[$__rate_interval]) and on(job,instance,cpu) ((node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"} >= 0) and (time() - timestamp(node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}) < $sample_freshness_s) and on(job,instance,cpu) (count by(job,instance,cpu) (node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}) == 1))) unless on(job,instance) count by(job,instance) (node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"} unless on(job,instance,cpu) (rate(node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}[$__rate_interval]) and on(job,instance,cpu) ((node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"} >= 0) and (time() - timestamp(node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}) < $sample_freshness_s) and on(job,instance,cpu) (count by(job,instance,cpu) (node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}) == 1)))))), 0), 100)) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))), \"node_key\", \" | \", \"job\", \"instance\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}}"
+        },
+        {
+          "refId": "RAM",
+          "expr": "max by(node_key) (label_join(((1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((100 * (1 - ((max by(job,instance) ((node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"} >= 0) and (time() - timestamp(node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"}) < $sample_freshness_s) and on(job,instance) (count by(job,instance) (node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"}) == 1))) / on(job,instance) (max by(job,instance) ((node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"} > 0) and (time() - timestamp(node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"}) < $sample_freshness_s) and on(job,instance) (count by(job,instance) (node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"}) == 1))))) and on(job,instance) ((max by(job,instance) ((node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"} >= 0) and (time() - timestamp(node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"}) < $sample_freshness_s) and on(job,instance) (count by(job,instance) (node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"}) == 1))) <= on(job,instance) (max by(job,instance) ((node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"} > 0) and (time() - timestamp(node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"}) < $sample_freshness_s) and on(job,instance) (count by(job,instance) (node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"}) == 1))))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))), \"node_key\", \" | \", \"job\", \"instance\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}}"
+        },
+        {
+          "refId": "DISK",
+          "expr": "max by(node_key,mountpoint) (label_join(((1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left(mountpoint) (topk by(job,instance) (1, ((((100 * (1 - (((node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} >= 0) and (time() - timestamp(node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)) / on(job,instance,device,mountpoint,fstype) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) and (time() - timestamp(node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1))))) and on(job,instance,device,mountpoint,fstype) (((node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} >= 0) and (time() - timestamp(node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)) <= on(job,instance,device,mountpoint,fstype) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) and (time() - timestamp(node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1)) unless on(job,instance) count by(job,instance) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) unless on(job,instance,device,mountpoint,fstype) (((100 * (1 - (((node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} >= 0) and (time() - timestamp(node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)) / on(job,instance,device,mountpoint,fstype) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) and (time() - timestamp(node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1))))) and on(job,instance,device,mountpoint,fstype) (((node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} >= 0) and (time() - timestamp(node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)) <= on(job,instance,device,mountpoint,fstype) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) and (time() - timestamp(node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))))))), \"node_key\", \" | \", \"job\", \"instance\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}}"
+        },
+        {
+          "refId": "RX",
+          "expr": "max by(node_key) (label_join(((1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((sum by(job,instance) (rate(node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}[$__rate_interval]) and on(job,instance,device) ((node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} >= 0) and (time() - timestamp(node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) < $sample_freshness_s) and on(job,instance,device) (count by(job,instance,device) (node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) == 1))) unless on(job,instance) count by(job,instance) (node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} unless on(job,instance,device) (rate(node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}[$__rate_interval]) and on(job,instance,device) ((node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} >= 0) and (time() - timestamp(node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) < $sample_freshness_s) and on(job,instance,device) (count by(job,instance,device) (node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) == 1))))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))), \"node_key\", \" | \", \"job\", \"instance\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}}"
+        },
+        {
+          "refId": "TX",
+          "expr": "max by(node_key) (label_join(((1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((sum by(job,instance) (rate(node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}[$__rate_interval]) and on(job,instance,device) ((node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} >= 0) and (time() - timestamp(node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) < $sample_freshness_s) and on(job,instance,device) (count by(job,instance,device) (node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) == 1))) unless on(job,instance) count by(job,instance) (node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} unless on(job,instance,device) (rate(node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}[$__rate_interval]) and on(job,instance,device) ((node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} >= 0) and (time() - timestamp(node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) < $sample_freshness_s) and on(job,instance,device) (count by(job,instance,device) (node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) == 1))))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))), \"node_key\", \" | \", \"job\", \"instance\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "N/A",
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "-1": {
+                        "text": "Unknown",
+                        "color": "gray"
+                      },
+                      "0": {
+                        "text": "Down",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "Up",
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 95
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RAM"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 95
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Disk"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 95
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Receive"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "Bps"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Transmit"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "Bps"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Node",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "node_key",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "node_key": true,
+              "nodename": true,
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "Time 7": true
+            },
+            "indexByName": {
+              "node": 0,
+              "Value #STATE": 1,
+              "Value #CPU": 2,
+              "Value #RAM": 3,
+              "Value #DISK": 4,
+              "mountpoint": 5,
+              "Value #RX": 6,
+              "Value #TX": 7,
+              "instance": 8,
+              "job": 9
+            },
+            "renameByName": {
+              "node": "Node",
+              "Value #STATE": "State",
+              "Value #CPU": "CPU",
+              "Value #RAM": "RAM",
+              "Value #DISK": "Disk",
+              "mountpoint": "Fullest filesystem",
+              "Value #RX": "Receive",
+              "Value #TX": "Transmit",
+              "instance": "Target",
+              "job": "Job"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "row",
+      "title": "Usage over time",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "CPU usage",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Average busy percentage across the node CPU cores (100 minus average idle). Missing core-rate samples hide the aggregate until complete.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((clamp_max(clamp_min(100 * (1 - (avg by(job,instance) (rate(node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}[$__rate_interval]) and on(job,instance,cpu) ((node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"} >= 0) and (time() - timestamp(node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}) < $sample_freshness_s) and on(job,instance,cpu) (count by(job,instance,cpu) (node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}) == 1))) unless on(job,instance) count by(job,instance) (node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"} unless on(job,instance,cpu) (rate(node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}[$__rate_interval]) and on(job,instance,cpu) ((node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"} >= 0) and (time() - timestamp(node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}) < $sample_freshness_s) and on(job,instance,cpu) (count by(job,instance,cpu) (node_cpu_seconds_total{job=~\"$job\",instance=~\"$instance\",mode=\"idle\"}) == 1)))))), 0), 100)) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "RAM usage",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Used memory percentage based on MemAvailable / MemTotal, matching the detailed host dashboard.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((100 * (1 - ((max by(job,instance) ((node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"} >= 0) and (time() - timestamp(node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"}) < $sample_freshness_s) and on(job,instance) (count by(job,instance) (node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"}) == 1))) / on(job,instance) (max by(job,instance) ((node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"} > 0) and (time() - timestamp(node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"}) < $sample_freshness_s) and on(job,instance) (count by(job,instance) (node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"}) == 1))))) and on(job,instance) ((max by(job,instance) ((node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"} >= 0) and (time() - timestamp(node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"}) < $sample_freshness_s) and on(job,instance) (count by(job,instance) (node_memory_MemAvailable_bytes{job=~\"$job\",instance=~\"$instance\"}) == 1))) <= on(job,instance) (max by(job,instance) ((node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"} > 0) and (time() - timestamp(node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"}) < $sample_freshness_s) and on(job,instance) (count by(job,instance) (node_memory_MemTotal_bytes{job=~\"$job\",instance=~\"$instance\"}) == 1))))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Filesystem usage",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Highest used percentage among eligible filesystems, based on available space. Temporary/pseudo filesystems and container runtime mounts are excluded; the current mount is shown in Node metrics.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() (max by(job,instance) ((((100 * (1 - (((node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} >= 0) and (time() - timestamp(node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)) / on(job,instance,device,mountpoint,fstype) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) and (time() - timestamp(node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1))))) and on(job,instance,device,mountpoint,fstype) (((node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} >= 0) and (time() - timestamp(node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)) <= on(job,instance,device,mountpoint,fstype) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) and (time() - timestamp(node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1)) unless on(job,instance) count by(job,instance) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) unless on(job,instance,device,mountpoint,fstype) (((100 * (1 - (((node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} >= 0) and (time() - timestamp(node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)) / on(job,instance,device,mountpoint,fstype) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) and (time() - timestamp(node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1))))) and on(job,instance,device,mountpoint,fstype) (((node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} >= 0) and (time() - timestamp(node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_avail_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)) <= on(job,instance,device,mountpoint,fstype) ((node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"} > 0) and (time() - timestamp(node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) < $sample_freshness_s) and on(job,instance,device,mountpoint,fstype) (count by(job,instance,device,mountpoint,fstype) (node_filesystem_size_bytes{job=~\"$job\",instance=~\"$instance\",fstype!~\"autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|efivarfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|ramfs|rootfs|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs\",mountpoint!~\"/(dev|proc|sys|run)(/.*)?|/var/lib/(docker|containers|kubelet)(/.*)?\"}) == 1)))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1)))))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Network traffic",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Receive/transmit totals per node. Physical interfaces accepts arbitrary physical NIC names while excluding common bridge, VLAN, bond-parent, firewall and container interfaces. Use Custom selection plus an explicit uplink pattern for a logical interface.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((sum by(job,instance) (rate(node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}[$__rate_interval]) and on(job,instance,device) ((node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} >= 0) and (time() - timestamp(node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) < $sample_freshness_s) and on(job,instance,device) (count by(job,instance,device) (node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) == 1))) unless on(job,instance) count by(job,instance) (node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} unless on(job,instance,device) (rate(node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}[$__rate_interval]) and on(job,instance,device) ((node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} >= 0) and (time() - timestamp(node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) < $sample_freshness_s) and on(job,instance,device) (count by(job,instance,device) (node_network_receive_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) == 1))))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}} receive"
+        },
+        {
+          "refId": "B",
+          "expr": "(1 + 0 * (label_join(((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))) * on(job,instance) group_left(nodename) (max by(job,instance,nodename) (node_uname_info{job=~\"$job\",instance=~\"$instance\",nodename!=\"\"}) and on(job,instance) (count by(job,instance) (node_uname_info{job=~\"$job\",instance=~\"$instance\"}) == 1))), \"node\", \"\", \"nodename\") or on(job,instance) label_join((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))), \"node\", \"\", \"instance\"))) * on(job,instance) group_left() ((sum by(job,instance) (rate(node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}[$__rate_interval]) and on(job,instance,device) ((node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} >= 0) and (time() - timestamp(node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) < $sample_freshness_s) and on(job,instance,device) (count by(job,instance,device) (node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) == 1))) unless on(job,instance) count by(job,instance) (node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} unless on(job,instance,device) (rate(node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}[$__rate_interval]) and on(job,instance,device) ((node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"} >= 0) and (time() - timestamp(node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) < $sample_freshness_s) and on(job,instance,device) (count by(job,instance,device) (node_network_transmit_bytes_total{job=~\"$job\",instance=~\"$instance\",device=~\"$network_devices\",device!~\"$network_exclude\"}) == 1))))) and on(job,instance) (((max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 0 or up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"} == 1) and on(job,instance) (count by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) == 1) and on(job,instance) (time() - max by(job,instance) (timestamp(up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"})) < $sample_freshness_s)) or on(job,instance) (-1 + 0 * (max by(job,instance) (up{job=~\"$job\",instance=~\"$instance\",host!=\"noc-core\",instance!=\"node-exporter:9100\"}) and on(job) (count by(job) (node_uname_info or node_exporter_build_info or up{job=\"node\"} or up{service=~\"node[-_]exporter\"}))))) == 1))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}} transmit"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}

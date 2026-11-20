@@ -20,9 +20,10 @@ The operator confirmed **Host Systems and Disk Health** and **Proxmox VM and LXC
 | Guide or template | What it covers |
 |---|---|
 | [Host Systems and Disk Health](../grafana/host-systems-and-disk-health.json) | Physical-host metrics and SMART disk health. |
+| [All Nodes Overview](../grafana/all-nodes-overview.json) | Additional compact table/charts for all Node Exporter nodes: CPU, RAM, disk space and network throughput. |
 | [Proxmox VM and LXC Monitoring](../grafana/proxmox-resources-and-group-budgets.json) | Automatic VM/LXC inventory, state, guest resources and summaries by actual Proxmox node. |
 | [Grafana documentation index](../grafana/docs/README.md) | Current setup and handover route. |
 | [Operations and troubleshooting](../grafana/docs/operations-and-troubleshooting.md) | Daily use, operator access, export, restore and common issues for the final pair. |
-| [Validation and acceptance](../grafana/docs/validation-and-acceptance.md) | Final status, live Proxmox screenshots and local structural/query checks. |
+| [Validation and acceptance](../grafana/README.md#validation-and-maintenance) | Final status, live Proxmox screenshots and local structural/query checks. |
 
 Blackbox service checks and manual group budgets are outside the final dashboard scope. Earlier procedures and October test results remain in the [Grafana documentation archive](../grafana/docs/archive/README.md), with their older JSON files in [old templates](../grafana/old%20templates/). They are not additional setup requirements for the final dashboards.

@@ -35,6 +35,8 @@ def normalized(panel):
 
 class DashboardTests(unittest.TestCase):
     def test_original_archives_are_byte_identical(self):
+        if not (ROOT / 'docs/dashboard-sources.json').exists():
+            self.skipTest('Original source fingerprint manifest is not present')
         manifest = read(ROOT / 'docs/dashboard-sources.json')
         for name, digest in manifest['archived'].items():
             self.assertFalse((ROOT / name).exists())
@@ -42,7 +44,8 @@ class DashboardTests(unittest.TestCase):
 
     def test_import_identity_and_variables(self):
         paths = list(ROOT.glob('*.json'))
-        expected={'host-systems-and-disk-health.json', 'proxmox-resources-and-group-budgets.json'}
+        expected={'host-systems-and-disk-health.json', 'proxmox-resources-and-group-budgets.json', 'logs.json'}
+        expected.add('all-nodes-overview.json')
         if (ROOT / 'service-health-and-catalogue.json').exists():
             expected.add('service-health-and-catalogue.json')
         self.assertEqual({p.name for p in paths}, expected)
@@ -122,6 +125,27 @@ class DashboardTests(unittest.TestCase):
         catalogue = read(ROOT / 'old templates/dashboard-template.json')
         for panel in catalogue['panels'][1:]:
             self.assertEqual(panel['targets'], actual[panel['title']]['targets'])
+
+    def test_node_overview_uses_existing_host_metrics_only(self):
+        dashboard=read(ROOT/'all-nodes-overview.json')
+        items=[p for p in panels(dashboard['panels']) if p['type']!='row']
+        self.assertEqual({p['title'] for p in items}, {'Node metrics','CPU usage','RAM usage','Filesystem usage','Network traffic'})
+        self.assertEqual(len(items),5)
+        expressions='\n'.join(t['expr'] for p in items for t in p.get('targets',[]))
+        self.assertNotRegex(expressions,r'\b(?:pve_|probe_|noc_|smartctl_)\w+')
+        variables={v['name']:v for v in dashboard['templating']['list']}
+        for name in ('job','instance'):
+            self.assertTrue(variables[name]['includeAll'])
+            self.assertEqual(variables[name]['current']['value'],'$__all')
+        self.assertIn('Network interfaces',[v.get('label') for v in variables.values()])
+        self.assertEqual(variables['network_devices']['current']['value'],'.*')
+        self.assertEqual(variables['network_exclude']['current']['text'],'Physical interfaces')
+        self.assertIn('host!="noc-core"',expressions)
+        self.assertIn('instance!="node-exporter:9100"',expressions)
+        self.assertIn('host!="noc-core"',variables['instance']['query']['query'])
+        table=next(p for p in items if p['title']=='Node metrics')
+        self.assertEqual(table['transformations'][0]['options']['byField'],'node_key')
+        self.assertIn('Fullest filesystem',table['transformations'][1]['options']['renameByName'].values())
 
     def test_host_disk_health_survives(self):
         service = read(ROOT / 'old templates/service-health-dashboard-template.json')

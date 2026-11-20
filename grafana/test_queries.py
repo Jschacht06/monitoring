@@ -217,7 +217,135 @@ def suite():
     add('empty-guest-inventory-stays-unknown',[metric('up',dict(job='pve',instance='cluster-a'))],[
         (guest_expr('Proxmox scrape health'),[sample(1)]),(guest_expr('Discovered VMs and LXCs'),[]),
         (guest_expr('Stopped guests'),[])])
+    tests.extend(node_suite())
     return dict(rule_files=[], evaluation_interval="30s", tests=tests)
+
+
+def node_suite():
+    overview=load('all-nodes-overview.json')
+    tests=[]
+    interfaces='.*'
+    physical_exclude='lo|veth.*|docker.*|br.*|virbr.*|vmbr.*|tap.*|fw.*|bond.*|tun.*|tailscale.*|cali.*|flannel.*|cni.*|VLAN.*|vlan.*|ln_.*|.*[.].*'
+
+    def expr(title, ref='A', job='.*', instance='.*', devices=interfaces, exclude=physical_exclude):
+        panel=next(p for p in overview['panels'] if p['title']==title)
+        expression=next(t['expr'] for t in panel['targets'] if t['refId']==ref)
+        for key,value in {'$job':job,'$instance':instance,'$sample_freshness_s':'90','$network_devices':devices,'$network_exclude':exclude,'$__rate_interval':'2m'}.items():
+            expression=expression.replace(key,value)
+        return expression
+
+    def metric(name, identity, values='1+0x4'):
+        return dict(series=name+labels(**identity),values=values)
+
+    def fixture(up_a='1+0x4', overrides=None, omit=()):
+        overrides=overrides or {}
+        series=[]
+        for instance,nodename,up,idle,total,available in [('host-a:9100','node-a',up_a,15,1000,250),('host-b:9100','node-b','1+0x4',30,2000,1500)]:
+            base=dict(job='node',instance=instance,host='same-scrape-host')
+            def emit(name, extra=None, values='1+0x4'):
+                identity=dict(base,**(extra or {}))
+                selector=(instance,name,identity.get('device',identity.get('cpu','')))
+                if selector not in omit:
+                    series.append(metric(name,identity,overrides.get(selector,values)))
+            emit('up',values=up)
+            emit('node_uname_info',{'nodename':nodename})
+            for cpu in ('0','1'):
+                emit('node_cpu_seconds_total',{'mode':'idle','cpu':cpu},f'0+{idle}x4')
+            emit('node_memory_MemTotal_bytes',values=f'{total}+0x4')
+            emit('node_memory_MemAvailable_bytes',values=f'{available}+0x4')
+            filesystems=[('/dev/sda1','/','ext4',1000,500 if nodename=='node-a' else 750),
+                         ('tmpfs','/run','tmpfs',100,0),('overlay','/overlay','overlay',100,0),
+                         ('/dev/sda1','/var/lib/docker/volumes/example','ext4',100,0)]
+            if nodename=='node-a':filesystems.append(('/dev/sdb1','/data','xfs',1000,100))
+            for device,mountpoint,fstype,size,free in filesystems:
+                extra=dict(device=device,mountpoint=mountpoint,fstype=fstype)
+                emit('node_filesystem_size_bytes',extra,f'{size}+0x4')
+                emit('node_filesystem_avail_bytes',extra,f'{free}+0x4')
+            devices=[('eth0',3000,6000),('enp1s0',6000,9000),('vmbr0',9000,15000),('bond0',9000,15000),
+                     ('veth123',9000,15000),('lo',30000,30000),('eth0.100',9000,15000),
+                     ('VLAN10',9000,15000),('ln_VLAN10',9000,15000),('fwbr101i0',9000,15000)] if nodename=='node-a' else [('eth0',1500,3000)]
+            for device,rx,tx in devices:
+                emit('node_network_receive_bytes_total',{'device':device},f'0+{rx}x4')
+                emit('node_network_transmit_bytes_total',{'device':device},f'0+{tx}x4')
+        series += [metric('up',dict(job='prometheus',instance='localhost:9090')),
+                   metric('up',dict(job='pve',instance='cluster-a'))]
+        return series
+
+    def info(instance,nodename,job='node'):
+        return dict(job=job,instance=instance,nodename=nodename,node=nodename)
+
+    def key(instance,job='node'):
+        return job+' | '+instance
+
+    def field(value,instance,**extra):
+        return sample(value,node_key=key(instance),**extra)
+
+    def add(name, series, checks):
+        tests.append(dict(name='node-overview-'+name,interval='30s',input_series=series,
+            # Ignore rate-extrapolation noise far below the dashboard's displayed precision.
+            promql_expr_test=[dict(expr='round(('+q+'), 0.000001)',eval_time='2m',exp_samples=values) for q,values in checks]))
+
+    a,b='host-a:9100','host-b:9100'
+    add('all-nodes-cpu-ram-filesystems-and-network',fixture(),[
+        (expr('Node metrics','STATE'),[sample(1,node_key=key(a),**info(a,'node-a')),sample(1,node_key=key(b),**info(b,'node-b'))]),
+        (expr('Node metrics','CPU'),[field(50,a),field(0,b)]),
+        (expr('Node metrics','RAM'),[field(75,a),field(25,b)]),
+        (expr('Node metrics','DISK'),[field(90,a,mountpoint='/data'),field(25,b,mountpoint='/')]),
+        (expr('Node metrics','RX'),[field(300,a),field(50,b)]),
+        (expr('Node metrics','TX'),[field(500,a),field(100,b)]),
+        (expr('Filesystem usage'),[sample(90,**info(a,'node-a')),sample(25,**info(b,'node-b'))])])
+    add('single-node-selection',fixture(),[
+        (expr('Node metrics','CPU',instance=b),[field(0,b)]),
+        (expr('Node metrics','RX',instance=b),[field(50,b)])])
+    add('failed-exporter-keeps-node-without-false-resource-zero',fixture(up_a='0+0x4'),[
+        (expr('Node metrics','STATE'),[sample(0,node_key=key(a),**info(a,'node-a')),sample(1,node_key=key(b),**info(b,'node-b'))]),
+        (expr('Node metrics','CPU'),[field(0,b)]),(expr('Node metrics','RAM'),[field(25,b)])])
+    add('stale-scrape-becomes-unknown',fixture(up_a='1 _ _ _ _'),[
+        (expr('Node metrics','STATE'),[sample(-1,node_key=key(a),**info(a,'node-a')),sample(1,node_key=key(b),**info(b,'node-b'))]),
+        (expr('Node metrics','RX'),[field(50,b)])])
+    add('missing-cpu-core-rate-does-not-average-partial-data',fixture(overrides={(a,'node_cpu_seconds_total','0'):'0 _ _ _ _'}),[
+        (expr('Node metrics','CPU'),[field(0,b)]),(expr('Node metrics','RAM'),[field(75,a),field(25,b)])])
+    add('missing-memory-is-not-zero',fixture(omit=[(a,'node_memory_MemAvailable_bytes','')]),[
+        (expr('Node metrics','RAM'),[field(25,b)])])
+    add('incomplete-filesystem-data-does-not-report-root-as-healthy',fixture(omit=[(a,'node_filesystem_avail_bytes','/dev/sdb1')]),[
+        (expr('Node metrics','DISK'),[field(25,b,mountpoint='/')])])
+    add('incomplete-interface-rates-do-not-understate-traffic',fixture(overrides={(a,'node_network_receive_bytes_total','enp1s0'):'_ _ _ _ 0'}),[
+        (expr('Node metrics','RX'),[field(50,b)])])
+    add('logical-uplink-can-be-selected-without-physical-double-count',fixture(),[
+        (expr('Node metrics','RX',devices='vmbr0',exclude='lo'),[field(300,a)]),
+        (expr('Node metrics','TX',devices='vmbr0',exclude='lo'),[field(500,a)])])
+    custom_names=[dict(item,series=item['series'].replace('device="eth0"','device="nic0"').replace('device="enp1s0"','device="uplink0"')) for item in fixture()]
+    add('physical-nics-do-not-require-an-eth-or-en-prefix',custom_names,[
+        (expr('Node metrics','RX'),[field(300,a),field(50,b)]),
+        (expr('Node metrics','TX'),[field(500,a),field(100,b)])])
+    # Exclude by stable target identity/role, never by a changing container hostname.
+    container=[]
+    for item in fixture():
+        if 'instance="'+a+'"' not in item['series']:continue
+        for instance in ['node-exporter:9100','noc-core.internal:9100']:
+            container.append(dict(item,series=item['series'].replace('instance="'+a+'"','instance="'+instance+'"')
+                .replace('host="same-scrape-host"','host="noc-core"').replace('nodename="node-a"','nodename="abc123def456"')))
+    add('monitoring-container-is-not-another-physical-node',fixture()+container,[
+        (expr('Node metrics','STATE'),[sample(1,node_key=key(a),**info(a,'node-a')),sample(1,node_key=key(b),**info(b,'node-b'))]),
+        (expr('Node metrics','RAM'),[field(75,a),field(25,b)]),
+        (expr('Node metrics','RX'),[field(300,a),field(50,b)])])
+    unlabeled_container=[dict(item,series=item['series'].replace('host="noc-core",','')) for item in container if 'instance="node-exporter:9100"' in item['series']]
+    add('internal-exporter-endpoint-is-excluded-even-without-host-label',fixture()+unlabeled_container,[
+        (expr('Node metrics','RAM'),[field(75,a),field(25,b)])])
+    add('unseen-failed-node-is-discovered-with-target-name',
+        [metric('up',dict(job='node',instance='new-node:9100'),'0+0x4')],[
+        (expr('Node metrics','STATE'),[sample(0,job='node',instance='new-node:9100',node='new-node:9100',node_key='node | new-node:9100')]),
+        (expr('Node metrics','CPU'),[])])
+    add('non-node-scrapes-never-appear-in-overview',
+        [metric('up',dict(job='prometheus',instance='localhost:9090')),metric('up',dict(job='pve',instance='cluster-a'))],[
+        (expr('Node metrics','STATE'),[]),(expr('Node metrics','RAM'),[])])
+    extra=[metric('up',dict(job='linux',instance=a)),metric('node_uname_info',dict(job='linux',instance=a,nodename='other-job')),
+           metric('node_memory_MemTotal_bytes',dict(job='linux',instance=a),'100+0x4'),
+           metric('node_memory_MemAvailable_bytes',dict(job='linux',instance=a),'100+0x4')]
+    add('additional-node-exporter-job-keeps-source-identity',fixture()+extra,[
+        (expr('Node metrics','RAM'),[field(75,a),field(25,b),sample(0,node_key=key(a,'linux'))]),
+        (expr('Node metrics','RAM',job='linux'),[sample(0,node_key=key(a,'linux'))])])
+    return tests
 
 
 def all_expressions():
@@ -228,11 +356,16 @@ def all_expressions():
     replacements={'$__rate_interval':'2m','$__interval_ms':'30000','$__interval':'30s','$__range_s':'120','$__range':'2m',
                   '$probe_interval_s':'30','$probe_freshness_s':'90','$disk_freshness_s':'180','$disk_host':'.*',
                   '$instance':'cluster-a','$service':'.*','$group':'.*','$nodename':'host-a','$node':'host-a:9100','$job':'blackbox',
-                  '$guest_node':'.*','$guest_type':'.*','$pve_freshness_s':'90'}
+                  '$guest_node':'.*','$guest_type':'.*','$pve_freshness_s':'90',
+                  '$sample_freshness_s':'90','$network_devices':'.*',
+                  '$network_exclude':'lo|veth.*|docker.*|br.*|virbr.*|vmbr.*|tap.*|fw.*|bond.*|tun.*|tailscale.*|cali.*|flannel.*|cni.*|VLAN.*|vlan.*|ln_.*|.*[.].*'}
     expressions=[]
     for path in sorted(ROOT.glob('*.json')):
         for panel in panels(load(path.name)['panels']):
             for target in panel.get('targets',[]):
+                datasource = target.get('datasource', panel.get('datasource', {}))
+                if datasource.get('type') == 'loki':
+                    continue  # LogQL is not PromQL; promtool cannot validate Loki queries.
                 expression=target.get('expr','')
                 if not expression: continue
                 for key,value in replacements.items(): expression=expression.replace(key,value)

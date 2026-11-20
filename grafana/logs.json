@@ -1,0 +1,174 @@
+{
+  "description": "Log volume and recent messages from the selected Loki source, with host and service filters. Choose Loki infra for Proxmox host logs or the noc source for Docker logs.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Monitoring dashboards",
+      "tags": ["noc-monitoring"],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Log volume by service",
+      "type": "timeseries",
+      "datasource": {"type": "loki", "uid": "${ds_loki}"},
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 7},
+      "description": "Log entries per query interval, grouped by service. Follows the same source, host and service filters as the log viewer.",
+      "interval": "30s",
+      "maxDataPoints": 240,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "${ds_loki}"},
+          "editorMode": "code",
+          "expr": "sum by (service) (count_over_time({host=~\"$host\",service=~\"$service\"}[$__auto]))",
+          "queryType": "range",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {"mode": "normal", "group": "A"}
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull", "max"]
+        },
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      }
+    },
+    {
+      "id": 2,
+      "title": "Log messages",
+      "type": "logs",
+      "datasource": {"type": "loki", "uid": "${ds_loki}"},
+      "gridPos": {"x": 0, "y": 7, "w": 24, "h": 18},
+      "description": "Up to 1,000 matching log entries in the selected time range, newest first. Narrow the time range or filters to inspect older entries. Expand a line to see its labels and details.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "${ds_loki}"},
+          "editorMode": "code",
+          "expr": "{host=~\"$host\",service=~\"$service\"}",
+          "queryType": "range",
+          "direction": "backward",
+          "maxLines": 1000
+        }
+      ],
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "options": {
+        "showTime": true,
+        "showLevel": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "showControls": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["Loki", "logs", "noc-monitoring"],
+  "templating": {
+    "list": [
+      {
+        "name": "ds_loki",
+        "label": "Loki source",
+        "type": "datasource",
+        "query": "loki",
+        "refresh": 1,
+        "current": {},
+        "options": [],
+        "includeAll": false,
+        "multi": false,
+        "hide": 0,
+        "regex": "",
+        "description": "Select the infra data source for Proxmox host logs or the noc data source for Docker logs."
+      },
+      {
+        "name": "host",
+        "label": "Host",
+        "type": "query",
+        "datasource": {"type": "loki", "uid": "${ds_loki}"},
+        "definition": "label_values({host=~\".+\"}, host)",
+        "query": {
+          "type": 1,
+          "label": "host",
+          "stream": "{host=~\".+\"}",
+          "refId": "var-host"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": "All", "value": "$__all"},
+        "options": [],
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {"type": "loki", "uid": "${ds_loki}"},
+        "definition": "label_values({host=~\"$host\"}, service)",
+        "query": {
+          "type": 1,
+          "label": "service",
+          "stream": "{host=~\"$host\"}",
+          "refId": "var-service"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": "All", "value": "$__all"},
+        "options": [],
+        "hide": 0,
+        "regex": ""
+      }
+    ]
+  },
+  "time": {"from": "now-12h", "to": "now"},
+  "timepicker": {
+    "refresh_intervals": ["15s", "30s", "1m", "5m", "15m", "30m", "1h"],
+    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d"]
+  },
+  "timezone": "browser",
+  "title": "Logs",
+  "uid": null,
+  "version": 1,
+  "weekStart": ""
+}

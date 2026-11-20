@@ -67,7 +67,7 @@ Tested end to end:
 - **Grafana** with Prometheus as a data source (added by hand).
 - **HTTPS certificate display**: the operator confirmed the manually configured certificate-days panel works in the homelab on 16 October 2026. The public HTTPS probe initially failed because of missing IPv6 routing; preferring IPv4 fixed it ([recorded issue and fix](docs/adding-targets.md#if-the-public-https-probe-reports-ipv6-network-is-unreachable)). This is display/metric verification, not a critical-certificate notification test.
 - **Final Grafana dashboards**: physical-host metrics and automatic Proxmox VM/LXC inventory, state, resources and per-node summaries. The two-dashboard scope is final; service catalogues and group budgets are archived references.
-- **Grafana validation**: both current dashboards are operator accepted; live Proxmox screenshots show 114 discovered guests, 73 running, 41 stopped and 0 Unknown. See the [final acceptance record](grafana/docs/validation-and-acceptance.md). Earlier service-dashboard tests and restore results are retained in the [archive](grafana/docs/archive/README.md).
+- **Grafana validation**: both current dashboards are operator accepted; live Proxmox screenshots show 114 discovered guests, 73 running, 41 stopped and 0 Unknown. See the [final acceptance record](grafana/README.md#validation-and-maintenance). Earlier service-dashboard tests and restore results are retained in the [archive](grafana/docs/archive/README.md).
 
 Implemented with live acceptance pending:
 
@@ -144,14 +144,13 @@ The quick start does not add probe targets automatically. Before filling the pub
 │   └── operations-and-troubleshooting.md # Daily commands, applying changes, known problems, security
 └── grafana/
     ├── README.md                              # Current dashboard import, filters and acceptance guide
+    ├── all-nodes-overview.json                 # Core CPU, RAM, disk and network metrics across all Node Exporter targets
     ├── host-systems-and-disk-health.json       # Full Node Exporter metrics plus SMART disk health
     ├── proxmox-resources-and-group-budgets.json # Automatic VM/LXC inventory, states, guest resources and summaries by node
     ├── old templates/                         # Previous project JSON files, unchanged
     └── docs/
         ├── README.md                          # Final dashboard documentation index
         ├── operations-and-troubleshooting.md  # Operator access, export, restore and troubleshooting
-        ├── validation-and-acceptance.md       # Final status and live/query evidence
-        ├── dashboard-sources.json             # Original source/template fingerprints
         └── archive/                           # Retired service-check and group-budget procedures
 ```
 
@@ -166,9 +165,10 @@ The quick start does not add probe targets automatically. Before filling the pub
 | [docs/operations-and-troubleshooting.md](docs/operations-and-troubleshooting.md) | Run the stack day to day and fix common problems |
 | [docs/README.md](docs/README.md) | Find monitoring guides and the final host/guest dashboard documentation |
 | [grafana/docs/README.md](grafana/docs/README.md) | Find the final host/guest dashboard setup, operations and acceptance guides |
-| [grafana/README.md](grafana/README.md) | Import the two host/guest dashboards and check their filters, prerequisites and acceptance |
+| [grafana/README.md](grafana/README.md) | Import the Grafana templates and check their filters, prerequisites and acceptance |
 | [Host Systems and Disk Health](grafana/host-systems-and-disk-health.json) | Import complete Node Exporter metrics and SMART health |
+| [All Nodes Overview](grafana/all-nodes-overview.json) | Compare CPU, RAM, disk-space and network usage across all configured Node Exporter targets |
 | [Proxmox VM and LXC Monitoring](grafana/proxmox-resources-and-group-budgets.json) | Import automatic VM/LXC inventory, states, guest resource usage and summaries by node |
 | [Grafana operations](grafana/docs/operations-and-troubleshooting.md) | Operate, export, restore and troubleshoot the final two dashboards |
-| [Grafana acceptance](grafana/docs/validation-and-acceptance.md) | Review final status and the live/local validation results |
+| [Grafana acceptance](grafana/README.md#validation-and-maintenance) | Review final status and the live/local validation results |
 | [Grafana archive](grafana/docs/archive/README.md) | Consult older service-check/budget procedures and historical results |
