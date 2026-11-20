@@ -1,8 +1,11 @@
 # Service catalogue in Grafana
 
-This guide continues the installation in [setup.md](../../docs/setup.md), adding a Grafana dashboard that lists currently discovered scrape targets by service, with their owner, dependencies and contact person. Each step ends with a check that tells you what you should see before you continue.
+> Archived procedure. The final scope confirmed on 20 November 2026 is [Host Systems and Disk Health plus Proxmox VM and LXC Monitoring](../../README.md). The service-check, group-budget and October test material below concerns earlier dashboards and is not required for the final pair.
 
-**Status — 16 October 2026:** catalogue and health behaviour were verified in the homelab, and the operator confirmed successful dashboard export/restore on a separate Grafana in approximately 10 minutes. See the [Grafana documentation index](README.md) and [test report](service-health-tests.md). School service coverage and owner agreements still need deployment-specific evidence. The dashboard JSON does not install the monitoring stack.
+
+This guide continues the installation in [setup.md](../../../docs/setup.md), adding a Grafana dashboard that lists currently discovered scrape targets by service, with their owner, dependencies and contact person. Each step ends with a check that tells you what you should see before you continue.
+
+**Status — 16 October 2026:** catalogue and health behaviour were verified in the homelab, and the operator confirmed successful dashboard export/restore on a separate Grafana in approximately 10 minutes. See the [Grafana documentation index](../README.md) and [test report](service-health-tests.md). School service coverage and owner agreements still need deployment-specific evidence. The dashboard JSON does not install the monitoring stack.
 
 All commands run as root inside the Debian 13 LXC, from the stack folder:
 
@@ -44,7 +47,7 @@ Use the same identity and metadata on every check for one service. The project t
 
 ## 1. Prerequisites
 
-On a new installation, use [setup.md](../../docs/setup.md) through step 8 as the supplied stack context, and verify a working Compose stack and Prometheus data source before continuing. On an existing installation, reuse its working configuration. You need permission to change the Prometheus configuration and create/save Grafana dashboards (and permission to create a data source if one is missing). The catalogue guide assumes sufficient resources and does not repeat the server installation.
+On a new installation, use [setup.md](../../../docs/setup.md) through step 8 as the supplied stack context, and verify a working Compose stack and Prometheus data source before continuing. On an existing installation, reuse its working configuration. You need permission to change the Prometheus configuration and create/save Grafana dashboards (and permission to create a data source if one is missing). The catalogue guide assumes sufficient resources and does not repeat the server installation.
 
 The base setup also copies `prometheus/template.yml` to `prometheus/prometheus.yml`. The latter is now an ignored local configuration file. On an existing installation, keep your current copy and integrate new template settings into it; copy the template only when creating a configuration for the first time.
 
@@ -152,7 +155,7 @@ Keep `noc-core` consistent with the existing internal targets’ `host` label. T
 
 The Prometheus example uses `/-/ready`: it returns success when Prometheus can serve queries. `/-/healthy`, used in the supporting setup example, is a liveness endpoint that always returns HTTP 200 while the server can answer it; it does not test readiness. Choose the endpoint matching your check's purpose. Grafana's `/api/health` checks the Grafana API/database health response; it does not test every configured data source. See [Prometheus management endpoints](https://prometheus.io/docs/prometheus/latest/management_api/) and [Grafana health API](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/other/#health-api).
 
-Real target files are ignored by Git, as explained in [adding-targets.md](../../docs/adding-targets.md). Leave the tracked `template.yml` as a template. The target/config files and their parent directories must be readable/traversable by the Prometheus process inside its container; a root-only target file can silently prevent discovery. Keep credentials out of these catalogue labels.
+Real target files are ignored by Git, as explained in [adding-targets.md](../../../docs/adding-targets.md). Leave the tracked `template.yml` as a template. The target/config files and their parent directories must be readable/traversable by the Prometheus process inside its container; a root-only target file can silently prevent discovery. Keep credentials out of these catalogue labels.
 
 **Check:** in Grafana *Explore* or the Prometheus query box, run:
 
@@ -166,7 +169,7 @@ After discovery and a few scrape cycles, both targets should return `1` when the
 
 ## 3. Add the school services
 
-Use one file per group, as in [adding-targets.md](../../docs/adding-targets.md#how-to-organise-the-files):
+Use one file per group, as in [adding-targets.md](../../../docs/adding-targets.md#how-to-organise-the-files):
 
 ```bash
 cp prometheus/targets/template.yml prometheus/targets/group-a.yml
@@ -231,7 +234,7 @@ Add that recipe under the existing modules mapping, preserve other recipes, and 
 docker compose exec blackbox blackbox_exporter --config.check --config.file=/etc/blackbox/blackbox.yml
 ```
 
-Only after validation succeeds, apply the change using the [existing operations procedure](../../docs/operations-and-troubleshooting.md#how-to-apply-a-change). Target-file-only changes need no restart. The [HTTPS test and IPv4 routing fix](../../docs/adding-targets.md#temporary-public-https-test) remain in the target guide; do not disable TLS verification just to work around a routing fault.
+Only after validation succeeds, apply the change using the [existing operations procedure](../../../docs/operations-and-troubleshooting.md#how-to-apply-a-change). Target-file-only changes need no restart. The [HTTPS test and IPv4 routing fix](../../../docs/adding-targets.md#temporary-public-https-test) remain in the target guide; do not disable TLS verification just to work around a routing fault.
 
 Probes run from Blackbox, so the endpoints must be reachable from the monitoring LXC. `localhost` in a probe target means Blackbox itself.
 
@@ -284,7 +287,7 @@ Why: the dashboard uses all `up` series so an unlabeled internal job is not sile
 
 `localhost:9090` is correct for Prometheus's self-scrape: that request runs inside Prometheus. It is different from a destination probed by Blackbox.
 
-For another host's Node Exporter, add the same catalogue labels to its static target block too. Keep its `host` value equal to that host's probes, as described in [how-to-guides.md](../../docs/how-to-guides.md#add-node_exporter-for-another-host).
+For another host's Node Exporter, add the same catalogue labels to its static target block too. Keep its `host` value equal to that host's probes, as described in [how-to-guides.md](../../../docs/how-to-guides.md#add-node_exporter-for-another-host).
 
 ### Optional drive-health exporter
 
@@ -302,7 +305,7 @@ If you enabled the Prometheus template's optional `smartctl` job, add all five c
           dependencies: 'external:docker'
 ```
 
-Replace the placeholders and set dependencies to match how the exporter is actually installed. Use the same `host` label as that machine's Node Exporter so the drive and host alerts stay aligned. Update an enabled job rather than creating a duplicate; leave the optional job commented out if you are not collecting drive health. The installation steps are in [how-to-guides.md](../../docs/how-to-guides.md#add-smartctl_exporter-for-drive-health).
+Replace the placeholders and set dependencies to match how the exporter is actually installed. Use the same `host` label as that machine's Node Exporter so the drive and host alerts stay aligned. Update an enabled job rather than creating a duplicate; leave the optional job commented out if you are not collecting drive health. The installation steps are in [how-to-guides.md](../../../docs/how-to-guides.md#add-smartctl_exporter-for-drive-health).
 
 ### Existing Proxmox API scrape or any other job
 
@@ -317,7 +320,7 @@ If `job="pve"` is enabled, its scrape is also included in this catalogue. Add th
           dependencies: 'external:docker; external:proxmox-api'
 ```
 
-Keep the actual `host` value already used by that job, and replace the other placeholders. This row describes the API collection check, not one row for every VM/LXC returned by the exporter. No new exporter or second `pve` job is needed just to add catalogue metadata. The supporting [Proxmox exporter guide](../../docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter) describes its existing integration; Smith guest resource data is handled separately in [smith-resource-metrics.md](smith-resource-metrics.md).
+Keep the actual `host` value already used by that job, and replace the other placeholders. This row describes the API collection check, not one row for every VM/LXC returned by the exporter. No new exporter or second `pve` job is needed just to add catalogue metadata. The supporting [Proxmox exporter guide](../../../docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter) describes its existing integration; Smith guest resource data is handled separately in [smith-resource-metrics.md](smith-resource-metrics.md).
 
 Apply all five catalogue labels to every other enabled scrape job too, including any direct scrape of an exporter's own `/metrics` endpoint. The dashboard intentionally uses all current `up` series; adding a new integration can therefore reveal incomplete metadata.
 
@@ -368,7 +371,7 @@ Why the service name: Grafana reaches Prometheus over the Docker network. `local
 
 ## 7. Create or reuse the catalogue dashboard
 
-If you do not have a catalogue dashboard yet, start with [service-catalogue-dashboard.md](service-catalogue-dashboard.md#1-choose-how-to-create-the-dashboard). It explains how to create the dashboard definition before importing it. The ready-made definition is in [dashboard-template.json](../dashboard-template.json), a separate file you can copy and edit.
+If you do not have a catalogue dashboard yet, start with [service-catalogue-dashboard.md](service-catalogue-dashboard.md#1-choose-how-to-create-the-dashboard). It explains how to create the dashboard definition before importing it. The ready-made definition is in [dashboard-template.json](../../old%20templates/dashboard-template.json), a separate file you can copy and edit.
 
 Follow this sequence in the dashboard guide:
 
@@ -408,7 +411,7 @@ count by (service, host, owner, contact, dependencies) (up)
 
 `up` is generated for each scrape target; see [Prometheus jobs and instances](https://prometheus.io/docs/concepts/jobs_instances/). A newly discovered target may not appear until its first scrape. Removed targets leave current results after discovery/staleness processing. A row is not proof that a service has been configured in every intended environment.
 
-For destination health, use `probe_success`, as explained in [up vs probe_success](../../docs/adding-targets.md#up-vs-probe_success). A blackbox check can have `up=1` and `probe_success=0`.
+For destination health, use `probe_success`, as explained in [up vs probe_success](../../../docs/adding-targets.md#up-vs-probe_success). A blackbox check can have `up=1` and `probe_success=0`.
 
 If you build or adjust the table manually, use these [query options](https://grafana.com/docs/grafana/latest/datasources/prometheus/query-editor/):
 
@@ -508,7 +511,7 @@ Changes to metadata create new time series, because labels are part of a series'
 | Symptom | Cause | Fix |
 |---|---|---|
 | New service does not appear | File does not match `targets/*.yml`, YAML is invalid, or discovery has not completed | Check filename and logs: `docker compose logs --since 5m prometheus`. Verify the active target list. |
-| Probe is listed but fails | Wrong endpoint/module, destination issue or network access | Check `probe_success` and follow [adding-targets.md](../../docs/adding-targets.md#after-saving). |
+| Probe is listed but fails | Wrong endpoint/module, destination issue or network access | Check `probe_success` and follow [adding-targets.md](../../../docs/adding-targets.md#after-saving). |
 | Missing-metadata count is greater than 0 | At least one probe/static target lacks a required label | Run the missing-label query from step 9 and complete that target's labels. |
 | Same service appears twice | Owner/contact/dependencies differ between its checks | Run the conflict query and align all five labels. |
 | Lots of rows for the same check | Query is Range or Both instead of Instant | Set Type to Instant and Format to Table. |
@@ -530,6 +533,6 @@ Only run the reload after validation succeeds. Restore specific edited target fi
 Next steps:
 
 - [service-catalogue-dashboard.md](service-catalogue-dashboard.md): create, edit, export and import the dashboard
-- [dashboard-template.json](../dashboard-template.json): ready-made dashboard definition to copy and customise
-- [adding-targets.md](../../docs/adding-targets.md): HTTP/TCP probe formats and diagnosis
-- [operations-and-troubleshooting.md](../../docs/operations-and-troubleshooting.md): stack operations and applying configuration changes
+- [dashboard-template.json](../../old%20templates/dashboard-template.json): ready-made dashboard definition to copy and customise
+- [adding-targets.md](../../../docs/adding-targets.md): HTTP/TCP probe formats and diagnosis
+- [operations-and-troubleshooting.md](../../../docs/operations-and-troubleshooting.md): stack operations and applying configuration changes

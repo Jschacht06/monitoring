@@ -59,7 +59,7 @@ Use consistent lowercase IDs for `service` and `host`, with dashes where appropr
 
 Write monitored dependencies as `service@host`, and unmonitored infrastructure as `external:<name>`. Separate several entries with `; `, for example `external:docker; prometheus@noc-core`. Use `none` only when you have confirmed that there are no dependencies to record. Keep the dependency list as one quoted string, not a YAML list.
 
-Checks for the same service on the same machine must share `service`, `host`, `owner`, `contact` and `dependencies` so they become one row. The health dashboard's status history, successful HTTP duration, observed availability and sample coverage panels use only `service` as their displayed name (`{{service}}`). Checks that share a service name remain separate series with the same displayed name; use the **Current probe checks** table for host, module and destination details. These labels document ownership and dependencies; they do not automatically change alert routing or inhibition. See [service-catalogue.md](../grafana/docs/service-catalogue.md#2-add-the-first-targets-and-their-catalogue-labels) for the catalogue setup.
+Checks for the same service on the same machine must share `service`, `host`, `owner`, `contact` and `dependencies` so they become one row. The health dashboard's status history, successful HTTP duration, observed availability and sample coverage panels use only `service` as their displayed name (`{{service}}`). Checks that share a service name remain separate series with the same displayed name; use the **Current probe checks** table for host, module and destination details. These labels document ownership and dependencies; they do not automatically change alert routing or inhibition. See [service-catalogue.md](../grafana/docs/archive/service-catalogue.md#2-add-the-first-targets-and-their-catalogue-labels) for the catalogue setup.
 
 ## Which probe to use
 
@@ -343,7 +343,7 @@ or up{job="blackbox", dependencies=""}
 
 Adding labels creates new time series; it does not rewrite earlier samples. A range query can still show the old series before the change. Old series disappear from current queries after staleness processing. See the [Prometheus data model](https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels) and [staleness behaviour](https://prometheus.io/docs/prometheus/latest/querying/basics/#staleness).
 
-A plain `up` also includes the `prometheus` and `node` jobs. Editing a Blackbox target file does not label those static targets. Follow [the internal-target step](../grafana/docs/service-catalogue.md#4-label-the-existing-internal-scrape-targets) for them; that main-configuration edit needs validation and a reload as described in [step 5](../grafana/docs/service-catalogue.md#5-apply-the-main-configuration-change).
+A plain `up` also includes the `prometheus` and `node` jobs. Editing a Blackbox target file does not label those static targets. Follow [the internal-target step](../grafana/docs/archive/service-catalogue.md#4-label-the-existing-internal-scrape-targets) for them; that main-configuration edit needs validation and a reload as described in [step 5](../grafana/docs/archive/service-catalogue.md#5-apply-the-main-configuration-change).
 
 ### 4. Refresh Grafana and the catalogue
 
@@ -362,7 +362,7 @@ If Explore has the labels but the catalogue columns are missing, edit **Every mo
 count by (service, host, owner, contact, dependencies) (up)
 ```
 
-Use **Instant**, **Table** format and a Table visualisation. In **Organize fields by name**, make `owner`, `contact` and `dependencies` visible and name them **Owner**, **Contact person** and **Dependencies**. Save any panel changes. The [dashboard guide](../grafana/docs/service-catalogue-dashboard.md#4-create-the-dashboard-manually-in-grafana-alternative) explains the full panel settings.
+Use **Instant**, **Table** format and a Table visualisation. In **Organize fields by name**, make `owner`, `contact` and `dependencies` visible and name them **Owner**, **Contact person** and **Dependencies**. Save any panel changes. The [dashboard guide](../grafana/docs/archive/service-catalogue-dashboard.md#4-create-the-dashboard-manually-in-grafana-alternative) explains the full panel settings.
 
 ### If labels still do not appear
 

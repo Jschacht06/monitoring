@@ -40,6 +40,8 @@ flowchart LR
 
 ## Features
 
+**Final Grafana scope — 20 November 2026:** Host Systems and Disk Health plus Proxmox VM and LXC Monitoring are accepted as final. Blackbox/service-check recipes and their earlier test results below are retained stack capabilities, not prerequisites for these two dashboards. See the [current Grafana guide](grafana/README.md).
+
 ### Working
 
 Tested end to end:
@@ -56,7 +58,7 @@ Tested end to end:
 - **Host metrics** for noc-core itself through node_exporter.
 - **Host metrics for the Proxmox host** (node_exporter, Debian package): filesystems including ZFS pools and per-LXC volumes, CPU/NVMe/NIC temperatures and ZFS pool health.
 - **Drive health** through smartctl_exporter (SMART status and drive temperatures of the physical drives).
-- **Host disk SMART table**: the service-health template now shows the latest exported overall SMART result per host/disk as Passed, Failed or Unknown. The dashboard source checked on 20 October 2026 has no `smartctl` target or metrics yet; collect them on the physical host, not the Debian monitoring VM. See [setup and acceptance](grafana/docs/health-and-usage-dashboards.md#host-disk-smart-health).
+- **Host disk SMART table**: Host Systems and Disk Health displays overall SMART status per host/device as Passed, Failed or Unknown. Select Disk host independently and collect smartctl metrics on the physical host; see the [current guide](grafana/README.md#host-dashboard-requirements).
 - **Alerts for drives, ZFS and temperatures**: `SmartStatusFailed`, `DriveNotReadable`, `ZfsPoolNotOnline` and five temperature alerts (`HostTemperatureHigh`/`Critical`, `NvmeTemperatureHigh`, `DriveTemperatureHigh`/`Critical`). All were tested by flipping their condition, with the firing and resolved emails. `DriveNotReadable` fired for a real faulted drive.
 - **Proxmox guests** through pve-exporter (read-only API token): the status of every VM and LXC. Guests are chosen with Proxmox tags: `monitored-critical` (critical alert after 2 minutes) and `monitored-warning` (warning alert after 5 minutes). Both alerts were tested end to end on a stopped LXC, with the firing and resolved emails. See [docs/how-to-guides.md](docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter).
 - **Extra checks**: a TCP check on SSH (`tcp_connect`), an HTTPS target with a self-signed certificate (`http_2xx_insecure`, Proxmox web UI) and an application check that needs HTTP 200 **and** `"database": "ok"` in Grafana's health answer (`http_grafana_health`). Each one was shown failing when broken on purpose, with the `ServiceDown` firing and resolved emails for the TCP and application checks.
@@ -64,8 +66,8 @@ Tested end to end:
 - **Flip test**: a way to prove an alert end to end without breaking anything, see [docs/how-to-guides.md](docs/how-to-guides.md#test-an-alert-by-flipping-its-condition).
 - **Grafana** with Prometheus as a data source (added by hand).
 - **HTTPS certificate display**: the operator confirmed the manually configured certificate-days panel works in the homelab on 16 October 2026. The public HTTPS probe initially failed because of missing IPv6 routing; preferring IPv4 fixed it ([recorded issue and fix](docs/adding-targets.md#if-the-public-https-probe-reports-ipv6-network-is-unreachable)). This is display/metric verification, not a critical-certificate notification test.
-- **Service catalogue documentation and dashboard template**: ownership, contacts and dependencies; see [grafana/docs/service-catalogue.md](grafana/docs/service-catalogue.md).
-- **Grafana service-list/health validation**: homelab Down/recovery, Unknown, latency and Viewer access checked; dashboard-only restore to a separate Grafana operator-confirmed in approximately 10 minutes, without restore screenshots. Start with [Grafana documentation](grafana/docs/README.md); see the [test report and requirements review](grafana/docs/service-health-tests.md). Smith and full-stack/data restore remain separate.
+- **Final Grafana dashboards**: physical-host metrics and automatic Proxmox VM/LXC inventory, state, resources and per-node summaries. The two-dashboard scope is final; service catalogues and group budgets are archived references.
+- **Grafana validation**: both current dashboards are operator accepted; live Proxmox screenshots show 114 discovered guests, 73 running, 41 stopped and 0 Unknown. See the [final acceptance record](grafana/docs/validation-and-acceptance.md). Earlier service-dashboard tests and restore results are retained in the [archive](grafana/docs/archive/README.md).
 
 Implemented with live acceptance pending:
 
@@ -76,7 +78,6 @@ Written but not tested:
 - **Alert `CertificateExpiryCritical`** (critical): a certificate expires within 3 days or has expired. Its flip test is pending.
 - **Alert `DiskWillFillSoon`** (warning): a linear forecast says the disk is full within 24 hours. It needs hours of real disk growth to test, so it has not fired yet.
 - **Alert `DriveDisappeared`** (critical): a drive that reported SMART data 24 hours ago and does not now. A real test needs a drive to be unplugged.
-- **Fresh health-template import and Smith resources**: the health template includes the manually verified certificate panel, but a fresh import of the complete updated template still needs acceptance checks. The Smith resource dashboard and proposed API/resource-budget rules remain pending live verification; see [grafana/docs/health-and-usage-dashboards.md](grafana/docs/health-and-usage-dashboards.md).
 
 Recipes in [docs/how-to-guides.md](docs/how-to-guides.md) that have not been tried on this setup yet are marked **Untested** there.
 
@@ -142,15 +143,16 @@ The quick start does not add probe targets automatically. Before filling the pub
 │   ├── how-to-guides.md                  # Recipes: thresholds, routing, inhibition, silences, escalation, ...
 │   └── operations-and-troubleshooting.md # Daily commands, applying changes, known problems, security
 └── grafana/
-    ├── dashboard-template.json                 # Catalogue dashboard import template
-    ├── service-health-dashboard-template.json  # Health dashboard import template
-    ├── smith-resources-dashboard-template.json # Resource dashboard import template
+    ├── README.md                              # Current dashboard import, filters and acceptance guide
+    ├── host-systems-and-disk-health.json       # Full Node Exporter metrics plus SMART disk health
+    ├── proxmox-resources-and-group-budgets.json # Automatic VM/LXC inventory, states, guest resources and summaries by node
+    ├── old templates/                         # Previous project JSON files, unchanged
     └── docs/
-        ├── service-catalogue.md                # Target ownership, contacts, dependencies and catalogue checks
-        ├── service-catalogue-dashboard.md      # Catalogue creation, export and import
-        ├── health-and-usage-dashboards.md      # Next step: service health, resource budgets and trends
-        ├── smith-resource-metrics.md           # Proposed approved API exporter and resource-budget integration
-        └── smith-resource-rules-template.yml   # Placeholder rules; not loaded from docs/
+        ├── README.md                          # Final dashboard documentation index
+        ├── operations-and-troubleshooting.md  # Operator access, export, restore and troubleshooting
+        ├── validation-and-acceptance.md       # Final status and live/query evidence
+        ├── dashboard-sources.json             # Original source/template fingerprints
+        └── archive/                           # Retired service-check and group-budget procedures
 ```
 
 ## Documentation
@@ -162,13 +164,11 @@ The quick start does not add probe targets automatically. Before filling the pub
 | [docs/configuration-reference.md](docs/configuration-reference.md) | Understand what each setting does |
 | [docs/how-to-guides.md](docs/how-to-guides.md) | Change thresholds, routing, inhibition, silences, escalation, receivers or secrets |
 | [docs/operations-and-troubleshooting.md](docs/operations-and-troubleshooting.md) | Run the stack day to day and fix common problems |
-| [docs/README.md](docs/README.md) | Find all monitoring and service catalogue guides |
-| [grafana/docs/README.md](grafana/docs/README.md) | Follow the integrated Grafana setup, validation, operator-access and dashboard-restore route |
-| [grafana/docs/service-catalogue.md](grafana/docs/service-catalogue.md) | Add ownership, contacts and dependencies to the Grafana service catalogue |
-| [grafana/docs/service-catalogue-dashboard.md](grafana/docs/service-catalogue-dashboard.md) | Create, edit, export and import the catalogue dashboard |
-| [grafana/dashboard-template.json](grafana/dashboard-template.json) | Start from the Grafana catalogue dashboard template |
-| [grafana/docs/health-and-usage-dashboards.md](grafana/docs/health-and-usage-dashboards.md) | Build service-health, Smith resource-budget and historical-trend dashboards |
-| [grafana/docs/smith-resource-metrics.md](grafana/docs/smith-resource-metrics.md) | Prepare approved read-only API access, guest ownership and resource budgets |
-| [grafana/service-health-dashboard-template.json](grafana/service-health-dashboard-template.json) | Import the health/status-history/latency/availability and host disk SMART-health dashboard |
-| [grafana/smith-resources-dashboard-template.json](grafana/smith-resources-dashboard-template.json) | Import the resource allocation/budget/trend dashboard after preparing its metrics |
-| [grafana/docs/smith-resource-rules-template.yml](grafana/docs/smith-resource-rules-template.yml) | Customize the proposed guest mapping and approved-budget recording rules |
+| [docs/README.md](docs/README.md) | Find monitoring guides and the final host/guest dashboard documentation |
+| [grafana/docs/README.md](grafana/docs/README.md) | Find the final host/guest dashboard setup, operations and acceptance guides |
+| [grafana/README.md](grafana/README.md) | Import the two host/guest dashboards and check their filters, prerequisites and acceptance |
+| [Host Systems and Disk Health](grafana/host-systems-and-disk-health.json) | Import complete Node Exporter metrics and SMART health |
+| [Proxmox VM and LXC Monitoring](grafana/proxmox-resources-and-group-budgets.json) | Import automatic VM/LXC inventory, states, guest resource usage and summaries by node |
+| [Grafana operations](grafana/docs/operations-and-troubleshooting.md) | Operate, export, restore and troubleshoot the final two dashboards |
+| [Grafana acceptance](grafana/docs/validation-and-acceptance.md) | Review final status and the live/local validation results |
+| [Grafana archive](grafana/docs/archive/README.md) | Consult older service-check/budget procedures and historical results |

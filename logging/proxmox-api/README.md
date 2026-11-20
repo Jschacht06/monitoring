@@ -72,6 +72,17 @@ Fill the five environment placeholders. `LOGGING_URL` is the gateway base URL
 without `/loki/api/v1/push`. Set host/owner spelling to the Prometheus labels.
 Keep `compose.yaml`, certificates and secrets private; they are Git-ignored.
 
+Check the installed configuration explicitly before running the collector:
+
+```bash
+docker compose -p proxmox-log-api -f compose.yaml config --services
+```
+
+Expected: only `proxmox-api`. Without an explicit `-f`, Compose can search parent
+directories and select the main Loki/Caddy configuration when this file is missing.
+An absent service means the collector files have not been installed on the LXC
+or the wrong configuration is selected. Local laptop edits do not deploy files.
+
 ```bash
 install -d -o root -g 65534 -m 750 secrets
 install -d -m 755 certs
@@ -130,9 +141,9 @@ to verified Proxmox TLS. Values other than true/false are rejected.
 ## 3. Check, then send once
 
 ```bash
-docker compose config -q
-docker compose build proxmox-api
-docker compose run --rm --no-deps proxmox-api --check
+docker compose -p proxmox-log-api -f compose.yaml config -q
+docker compose -p proxmox-log-api -f compose.yaml build proxmox-api
+docker compose -p proxmox-log-api -f compose.yaml run --rm --no-deps proxmox-api --check
 ```
 
 Expect `API check OK` for each unit and `infra login and certificate check OK`.
@@ -143,10 +154,10 @@ inspect the installed API schema instead of starting a loop of failing polls.
 Once preflight passes:
 
 ```bash
-docker compose run --rm --no-deps proxmox-api --once
-docker compose up -d proxmox-api
-docker compose ps
-docker compose logs --tail 30 proxmox-api
+docker compose -p proxmox-log-api -f compose.yaml run --rm --no-deps proxmox-api --once
+docker compose -p proxmox-log-api -f compose.yaml up -d proxmox-api
+docker compose -p proxmox-log-api -f compose.yaml ps
+docker compose -p proxmox-log-api -f compose.yaml logs --tail 30 proxmox-api
 ```
 
 Expect `poll OK; delivered=N` and eventually a healthy container. `N=0` is
@@ -209,7 +220,7 @@ source should not reveal the infra records.
 | PermissionError | secrets directory 750 root:65534; files 640 root:65534; certs readable |
 | unhealthy | Last successful complete poll is older than 180 seconds; inspect logs |
 
-Stop only this collector with `docker compose stop proxmox-api` from its own
+Stop only this collector with `docker compose -p proxmox-log-api -f compose.yaml stop proxmox-api` from its own
 directory. Do not remove its volume when troubleshooting a restart. To return
 to the host-Alloy method, stop this collector first, then follow setup step 8
 with the same infra credentials and approved access scope.

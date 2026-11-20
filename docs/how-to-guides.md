@@ -108,7 +108,7 @@ docker compose restart prometheus
 
 Changing a Grafana query does not change alerting. The latency chart also applies scrape-health and sample-age checks; its extra display safeguards are not automatically copied into the alert expression. Check the live rule before claiming chart and alert behaviour are identical. An actual delayed response test is needed to demonstrate degradation; a threshold flip only tests rule/notification routing.
 
-For changing an agreed threshold or duration, use [the threshold recipe](#change-an-alert-threshold-or-for-duration). For panel editing/import, use [the health dashboard guide](../grafana/docs/health-and-usage-dashboards.md#6-understand-or-build-the-trend-panels).
+For changing an agreed threshold or duration, use [the threshold recipe](#change-an-alert-threshold-or-for-duration). For panel editing/import, use [the health dashboard guide](../grafana/docs/archive/health-and-usage-dashboards.md#6-understand-or-build-the-trend-panels).
 
 ---
 
@@ -683,7 +683,7 @@ Verify:
 - `smartctl_device_smart_status{host="<host-name>"}` returns one series per drive.
 - `smartctl_device_temperature{host="<host-name>"}` returns the temperatures (label `temperature_type="current"`).
 
-The service-health dashboard can display these overall SMART results in its [Host disk SMART health table](../grafana/docs/health-and-usage-dashboards.md#host-disk-smart-health). Import the updated dashboard and select **Disk host**; the table shows Passed, Failed or Unknown.
+The service-health dashboard can display these overall SMART results in its [Host disk SMART health table](../grafana/docs/archive/health-and-usage-dashboards.md#host-disk-smart-health). Import the updated dashboard and select **Disk host**; the table shows Passed, Failed or Unknown.
 
 `MonitoringCheckFailed` already covers this job, so you are alerted if the exporter stops answering.
 

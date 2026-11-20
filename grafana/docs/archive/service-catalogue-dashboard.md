@@ -1,5 +1,8 @@
 # Service catalogue dashboard
 
+> Archived procedure. The final scope confirmed on 20 November 2026 is [Host Systems and Disk Health plus Proxmox VM and LXC Monitoring](../../README.md). The service-check, group-budget and October test material below concerns earlier dashboards and is not required for the final pair.
+
+
 **Schema update — 20 October 2026:** the catalogue uses `service`, `host`, `owner`, `contact` and `dependencies`; `group` is no longer required. For an existing imported dashboard, back up its export and update all four panel queries, descriptions and field transformations from the current template, preserving its dashboard identity and datasource mapping. Updating the repository alone does not change saved Grafana dashboards. Verify the inventory and missing-metadata panels after importing/updating.
 
 This guide continues from [step 7 of service-catalogue.md](service-catalogue.md#7-create-or-reuse-the-catalogue-dashboard). Complete the target labels and Prometheus data source first. Grafana is available at `http://<noc-core-ip>:3000`, and the source uses `http://prometheus:9090`.
@@ -8,7 +11,7 @@ This guide continues from [step 7 of service-catalogue.md](service-catalogue.md#
 
 The **Every monitored service** table is a current scrape inventory. It does not discover applications automatically or enumerate the VM/LXC guests contained in a Proxmox exporter's response. The three identity labels must be complete and metadata must agree before one table row corresponds to one service instance. The metadata counter checks absent/empty labels; it cannot verify contact accuracy, placeholders or services that were never configured.
 
-If you do not have a catalogue dashboard yet, first create its definition using [dashboard-template.json](../dashboard-template.json). The template already contains all four panels below, including the fully formatted probe status table. Column ordering, headings, status mappings and colours are included; importing does not require recreating them in the editor. Copy it, replace the title, description and environment-tag placeholders, then import the finished file into Grafana. **Import creates the dashboard in Grafana.**
+If you do not have a catalogue dashboard yet, first create its definition using [dashboard-template.json](../../old%20templates/dashboard-template.json). The template already contains all four panels below, including the fully formatted probe status table. Column ordering, headings, status mappings and colours are included; importing does not require recreating them in the editor. Copy it, replace the title, description and environment-tag placeholders, then import the finished file into Grafana. **Import creates the dashboard in Grafana.**
 
 | Position | Panel | Visualisation | Why it is there |
 |---|---|---|---|
@@ -36,7 +39,7 @@ If you do not have a catalogue dashboard yet, first create its definition using 
 
 The JSON file only needs to be on your local computer, where you open Grafana in a browser. **It does not need to be copied to or stored on the LXC.** You upload it through Grafana's web interface; Grafana stores the imported dashboard in its database. The supplied stack persists that database in its `grafana_data` volume; confirm the actual storage configuration before relying on it.
 
-1. On your computer, open the supplied [dashboard-template.json](../dashboard-template.json) from the package's `grafana` folder (or the matching file in your local clone).
+1. On your computer, open the supplied [dashboard-template.json](../../old%20templates/dashboard-template.json) from the package's `grafana` folder (or the matching file in your local clone).
 2. Save a copy named `service-catalogue-dashboard.json` on your computer. Use a different filename if you already have a working copy you want to keep.
 3. Open that copy in a text editor.
 
@@ -48,7 +51,7 @@ Why a separate file: the supplied template remains a starting point, while your 
 
 ## 3. Edit the dashboard file
 
-Replace the `<your ... here>` placeholders in your working copy before importing it. The panel queries and data-source mapping are already configured. The excerpts below show the existing code in [dashboard-template.json](../dashboard-template.json) and explain the required text changes and optional presentation changes.
+Replace the `<your ... here>` placeholders in your working copy before importing it. The panel queries and data-source mapping are already configured. The excerpts below show the existing code in [dashboard-template.json](../../old%20templates/dashboard-template.json) and explain the required text changes and optional presentation changes.
 
 ### Dashboard name and description
 

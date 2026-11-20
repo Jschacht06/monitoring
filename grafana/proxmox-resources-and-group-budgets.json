@@ -1,0 +1,1789 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "limit": 100,
+        "name": "Annotations & Alerts",
+        "showIn": 0,
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Automatic VM/LXC discovery, running/stopped/unknown state, guest allocations and usage, and summaries by actual Proxmox node. Uses existing pve-exporter metrics only. Physical-host CPU, RAM, storage and hardware health belong to Host Systems and Disk Health.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Monitoring dashboards",
+      "tags": [
+        "noc-monitoring"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "row",
+      "title": "VM and LXC overview",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "id": 1
+    },
+    {
+      "title": "Proxmox scrape health",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "description": "Collection state for the selected API instance. Stale, absent or duplicate scrapes are Unknown; this does not prove complete API permissions.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(up{job=\"pve\",instance=\"$instance\"}) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "Unknown",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Failed",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "id": 2
+    },
+    {
+      "title": "Discovered VMs and LXCs",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "description": "Current API-visible entries matching the filters, including templates. This is discovered inventory, not an expected-service list.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"}))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "Unknown",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "id": 3
+    },
+    {
+      "title": "Running guests",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "description": "Running/stopped requires a fresh valid guest-state sample and successful API scrape. Missing or invalid state is Unknown. Counts include selected templates.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1) or (0 * count(max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "Unknown",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "id": 4
+    },
+    {
+      "title": "Stopped guests",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "description": "Running/stopped requires a fresh valid guest-state sample and successful API scrape. Missing or invalid state is Unknown. Counts include selected templates.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 0) or (0 * count(max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "Unknown",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "id": 5
+    },
+    {
+      "title": "Unknown guest state",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "description": "Running/stopped requires a fresh valid guest-state sample and successful API scrape. Missing or invalid state is Unknown. Counts include selected templates.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == -1) or (0 * count(max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "Unknown",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "id": 6
+    },
+    {
+      "title": "Templates",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "description": "Templates remain visible in inventory and capacity totals; filter individual table columns to distinguish them from workloads.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) and on(job,instance,id) pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\",template=\"1\"}) or (0 * count(max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "Unknown",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "id": 7
+    },
+    {
+      "type": "row",
+      "title": "VM and LXC inventory",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "id": 8
+    },
+    {
+      "title": "VM and LXC inventory",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 13
+      },
+      "targets": [
+        {
+          "refId": "STATE",
+          "expr": "label_join((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\")",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "CPU_LIMIT",
+          "expr": "max by(guest_key) (label_join(((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "CPU_PERCENT",
+          "expr": "max by(guest_key) (label_join((100 * (((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_cpu_usage_ratio{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_cpu_usage_ratio{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_cpu_usage_ratio{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1))), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "RAM_ALLOC",
+          "expr": "max by(guest_key) (label_join(((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "RAM_USED",
+          "expr": "max by(guest_key) (label_join((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "RAM_PERCENT",
+          "expr": "max by(guest_key) (label_join((100 * (((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)) / on(job,instance,id,node,name,type,template,tags) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s))))), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "DISK_ALLOC",
+          "expr": "max by(guest_key) (label_join(((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "DISK_USED",
+          "expr": "max by(guest_key) (label_join((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) and on(job,instance,id) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\",type=\"lxc\"}) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "DISK_PERCENT",
+          "expr": "max by(guest_key) (label_join((100 * (((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) and on(job,instance,id) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\",type=\"lxc\"}) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)) / on(job,instance,id,node,name,type,template,tags) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s))))), \"guest_key\", \" | \", \"job\", \"instance\", \"id\", \"node\", \"name\", \"type\", \"template\", \"tags\"))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "N/A",
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "-1": {
+                        "text": "Unknown",
+                        "color": "gray"
+                      },
+                      "0": {
+                        "text": "Stopped",
+                        "color": "orange"
+                      },
+                      "1": {
+                        "text": "Running",
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Type"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "qemu": {
+                        "text": "VM"
+                      },
+                      "lxc": {
+                        "text": "LXC"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Template"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "No"
+                      },
+                      "1": {
+                        "text": "Yes"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vCPU capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU usage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 95
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RAM usage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 95
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "LXC root usage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 95
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RAM capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RAM used"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Root disk capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "LXC root used"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Node",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "guest_key",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "Time 7": true,
+              "Time 8": true,
+              "Time 9": true,
+              "Time 10": true,
+              "guest_key": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {
+              "node": 0,
+              "id": 1,
+              "name": 2,
+              "type": 3,
+              "template": 4,
+              "Value #STATE": 5,
+              "Value #CPU_LIMIT": 6,
+              "Value #CPU_PERCENT": 7,
+              "Value #RAM_ALLOC": 8,
+              "Value #RAM_USED": 9,
+              "Value #RAM_PERCENT": 10,
+              "Value #DISK_ALLOC": 11,
+              "Value #DISK_USED": 12,
+              "Value #DISK_PERCENT": 13,
+              "tags": 14
+            },
+            "renameByName": {
+              "node": "Node",
+              "id": "Guest ID",
+              "name": "Name",
+              "type": "Type",
+              "template": "Template",
+              "tags": "Tags",
+              "Value #STATE": "State",
+              "Value #CPU_LIMIT": "vCPU capacity",
+              "Value #CPU_PERCENT": "CPU usage",
+              "Value #RAM_ALLOC": "RAM capacity",
+              "Value #RAM_USED": "RAM used",
+              "Value #RAM_PERCENT": "RAM usage",
+              "Value #DISK_ALLOC": "Root disk capacity",
+              "Value #DISK_USED": "LXC root used",
+              "Value #DISK_PERCENT": "LXC root usage"
+            }
+          }
+        }
+      ],
+      "description": "Discovered guest names, actual Proxmox node, type, template flag, current state, capacities and usage. Includes stopped guests. CPU/RAM usage requires Running state; root-filesystem usage is shown for LXC only. N/A means unavailable or not applicable. VM filesystem usage is not inferred from zero-valued API disk metrics.",
+      "id": 9
+    },
+    {
+      "type": "row",
+      "title": "Guest summary by Proxmox node",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 1
+      },
+      "id": 10
+    },
+    {
+      "title": "Guests and allocated capacity by node",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "TOTAL",
+          "expr": "count by(node) (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"}))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "RUNNING",
+          "expr": "sum by(node) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == bool 1)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "STOPPED",
+          "expr": "sum by(node) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == bool 0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "UNKNOWN",
+          "expr": "sum by(node) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == bool -1)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "CPU",
+          "expr": "sum by(node) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) unless on(node) count by(node) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) unless on(job,instance,id) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_cpu_usage_limit{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "RAM",
+          "expr": "sum by(node) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) unless on(node) count by(node) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) unless on(job,instance,id) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        },
+        {
+          "refId": "DISK",
+          "expr": "sum by(node) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) unless on(node) count by(node) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) unless on(job,instance,id) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "N/A",
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Guest RAM capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Guest root disk capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VMs and LXCs"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Running"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Stopped"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unknown"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Guest vCPU capacity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Node",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "node",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "Time 7": true,
+              "Time 8": true
+            },
+            "indexByName": {
+              "node": 0,
+              "Value #TOTAL": 1,
+              "Value #RUNNING": 2,
+              "Value #STOPPED": 3,
+              "Value #UNKNOWN": 4,
+              "Value #CPU": 5,
+              "Value #RAM": 6,
+              "Value #DISK": 7
+            },
+            "renameByName": {
+              "node": "Node",
+              "Value #TOTAL": "VMs and LXCs",
+              "Value #RUNNING": "Running",
+              "Value #STOPPED": "Stopped",
+              "Value #UNKNOWN": "Unknown",
+              "Value #CPU": "Guest vCPU capacity",
+              "Value #RAM": "Guest RAM capacity",
+              "Value #DISK": "Guest root disk capacity"
+            }
+          }
+        }
+      ],
+      "description": "Guest counts and sums of API-reported guest capacities by their actual node label. Includes stopped guests and templates when capacity is reported. These are guest allocations, not physical-host usage or approved budgets. An incomplete capacity total is N/A.",
+      "id": 11
+    },
+    {
+      "type": "row",
+      "title": "Guest resource trends",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 1
+      },
+      "id": 12
+    },
+    {
+      "title": "Guests CPU usage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 12,
+        "h": 9
+      },
+      "description": "CPU utilization reported for running guests. Node/type filters apply; missing or stale data creates gaps.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_cpu_usage_ratio{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_cpu_usage_ratio{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_cpu_usage_ratio{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 13
+    },
+    {
+      "title": "Guests memory usage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 9
+      },
+      "description": "RAM utilization compared with API-reported guest capacity; running guests only.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_memory_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)) / on(job,instance,id,node,name,type,template,tags) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_memory_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s))))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 14
+    },
+    {
+      "title": "LXC guests Disk usage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 9
+      },
+      "description": "Running LXC root filesystem usage compared with API-reported root disk capacity. VM filesystem usage needs guest-level metrics and is not inferred here.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_usage_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) and on(job,instance,id) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\",type=\"lxc\"}) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)) / on(job,instance,id,node,name,type,template,tags) ((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} > 0) and (time() - timestamp(pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_size_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s))))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 15
+    },
+    {
+      "type": "row",
+      "title": "Guest network and disk activity",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 24,
+        "h": 1
+      },
+      "id": 16
+    },
+    {
+      "title": "Network IO/s",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Receive and transmit throughput for running guests, not physical NIC traffic. Uses the exporter metric names already used by the original template.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() (rate(pve_network_receive_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}[$__rate_interval]) and on(job,instance,id) ((max by(job,instance,id) ((pve_network_receive_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_network_receive_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_network_receive_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s))))) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}}) receive"
+        },
+        {
+          "refId": "B",
+          "expr": "((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() (rate(pve_network_transmit_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}[$__rate_interval]) and on(job,instance,id) ((max by(job,instance,id) ((pve_network_transmit_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_network_transmit_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_network_transmit_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s))))) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}}) transmit"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 17
+    },
+    {
+      "title": "Disk IO/s",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 50,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Combined guest virtual-disk read/write throughput for running guests. Not physical host disk activity.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((rate(pve_disk_write_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}[$__rate_interval]) and on(job,instance,id) ((max by(job,instance,id) ((pve_disk_write_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_disk_write_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_write_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) + on(job,instance,id) (rate(pve_disk_read_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}[$__rate_interval]) and on(job,instance,id) ((max by(job,instance,id) ((pve_disk_read_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} >= 0) and (time() - timestamp(pve_disk_read_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_disk_read_bytes{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))))) and on(job,instance,id) ((((max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})) * on(job,instance,id) group_left() ((max by(job,instance,id) ((pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 0 or pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"} == 1) and (time() - timestamp(pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) < $pve_freshness_s)) and on(job,instance,id) (count by(job,instance,id) (pve_up{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\"}) == 1)) and on() ((min(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (count(up{job=\"pve\",instance=\"$instance\"}) == 1) and on() (time() - max(timestamp(up{job=\"pve\",instance=\"$instance\"})) < $pve_freshness_s)))) or on(job,instance,id,node,name,type,template,tags) (-1 + 0 * (max by(job,instance,id,node,name,type,template,tags) (pve_guest_info{job=\"pve\",instance=\"$instance\",id=~\"qemu/.+|lxc/.+\",node=~\"$guest_node\",type=~\"$guest_type\"})))) == 1)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{node}} / {{name}} ({{id}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 18
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "Prometheus",
+    "Proxmox",
+    "noc-monitoring"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "API instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(up{job=\"pve\"}, instance)",
+        "query": {
+          "query": "label_values(up{job=\"pve\"}, instance)",
+          "refId": "var-instance"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "options": [],
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "guest_node",
+        "label": "Proxmox node",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(pve_guest_info{job=\"pve\",instance=\"$instance\"}, node)",
+        "query": {
+          "query": "label_values(pve_guest_info{job=\"pve\",instance=\"$instance\"}, node)",
+          "refId": "var-guest_node"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": "",
+        "allValue": ".*"
+      },
+      {
+        "name": "guest_type",
+        "label": "Guest type",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(pve_guest_info{job=\"pve\",instance=\"$instance\"}, type)",
+        "query": {
+          "query": "label_values(pve_guest_info{job=\"pve\",instance=\"$instance\"}, type)",
+          "refId": "var-guest_type"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": "",
+        "allValue": ".*"
+      },
+      {
+        "name": "pve_freshness_s",
+        "type": "constant",
+        "query": "90",
+        "hide": 2,
+        "current": {
+          "text": "90",
+          "value": "90"
+        },
+        "options": [
+          {
+            "text": "90",
+            "value": "90",
+            "selected": true
+          }
+        ],
+        "description": "Maximum accepted scrape and resource sample age, exclusive. Default 90 seconds assumes 30-second scrapes."
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
+  },
+  "timezone": "",
+  "title": "Proxmox VM and LXC Monitoring",
+  "uid": null,
+  "version": 2,
+  "weekStart": ""
+}

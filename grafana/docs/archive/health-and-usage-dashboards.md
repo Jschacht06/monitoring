@@ -1,8 +1,11 @@
 # Grafana health, resource usage and trends
 
+> Archived procedure. The final scope confirmed on 20 November 2026 is [Host Systems and Disk Health plus Proxmox VM and LXC Monitoring](../../README.md). The service-check, group-budget and October test material below concerns earlier dashboards and is not required for the final pair.
+
+
 This guide continues from the working [service catalogue](service-catalogue.md). Keep that dashboard as the ownership and dependency list. Add two dashboards for the next project milestone: service health over time, and Smith resource usage compared with approved budgets. Each step ends with a check before you continue.
 
-**Status — 16 October 2026:** the service-list and service-health implementation is complete for the tested homelab scope. Down/recovery, Unknown, slow-response display and Viewer access were verified with supplied evidence; dashboard restore to a separate Grafana was operator-confirmed in approximately 10 minutes, without restore screenshots. See the [test report](service-health-tests.md) and [setup route](README.md). School coverage, agreed application checks and full-stack restore remain separate requirements. Smith metrics, quotas and resource trends are deferred. The supplied setup already describes pve-exporter; the Smith guide extends that integration without requiring another collector.
+**Status — 16 October 2026:** the service-list and service-health implementation is complete for the tested homelab scope. Down/recovery, Unknown, slow-response display and Viewer access were verified with supplied evidence; dashboard restore to a separate Grafana was operator-confirmed in approximately 10 minutes, without restore screenshots. See the [test report](service-health-tests.md) and [setup route](../README.md). School coverage, agreed application checks and full-stack restore remain separate requirements. Smith metrics, quotas and resource trends are deferred. The supplied setup already describes pve-exporter; the Smith guide extends that integration without requiring another collector.
 
 | Dashboard | Questions it answers | Data needed |
 |---|---|---|
@@ -10,7 +13,7 @@ This guide continues from the working [service catalogue](service-catalogue.md).
 | Service health and trends (new) | Which check fails, is the check itself working, how has health/latency changed? | Existing Blackbox probes, `up` and optional smartctl drive metrics |
 | Smith resources and budgets (new) | How much is allocated, how much is used, how close is each group to its approved budget? | Approved Proxmox API metrics, guest inventory and group budgets |
 
-The health dashboard can be built once the existing stack and Blackbox targets pass step 1. Its certificate panel also needs at least one HTTPS target; HTTP-only checks have no certificate metrics. Its disk-health table needs the existing smartctl exporter on each physical host; see [Host disk SMART health](#host-disk-smart-health). The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
+The health dashboard can be built once the existing stack and Blackbox targets pass step 1. Its certificate panel also needs at least one HTTPS target; HTTP-only checks have no certificate metrics. Its disk-health table needs the existing smartctl exporter on each physical host; see [Host disk SMART health](#host-disk-smart-health). The Smith dashboard needs additional data. `node_exporter` inside noc-core can expose host-wide CPU/memory information: do not use it as proof of the LXC's quota or usage. The repo already documents this [LXC limitation](../../../docs/operations-and-troubleshooting.md#problems-seen-in-this-project).
 
 Commands in this guide run inside noc-core from `/opt/monitoring`. Dashboard JSON files are edited on your own computer and uploaded through Grafana, just like the catalogue template. They do not need to be stored on the LXC.
 
@@ -44,7 +47,7 @@ In Prometheus, check *Status → Configuration*, *Command-line flags* and *Targe
 
 For the probe panels, the health template has two hidden **Constant** variables: `probe_interval_s=30` (coverage denominator) and `probe_freshness_s=90` (maximum accepted sample age, exclusive). Set the first to the verified interval in seconds; choose the second longer than normal scrape completion and jitter, typically three intervals for this stack. Also update the status-history **Min interval** separately if collection is not every 30s. One coverage constant assumes every selected check uses the same interval; split dashboards or adapt the coverage calculation if intervals differ. These display settings do not change Prometheus collection. See [Constant variables](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/add-template-variables/#add-a-constant-variable).
 
-**Check:** compare current `up{job="blackbox"}` with the agreed service/check list and the target files; no metric query can find a target that was never configured. Each expected probe needs `service`, `host`, `module`, `owner`, `contact` and `dependencies`. Confirm the `module` label matches the actual `?module=` relabeling and that `instance` is the destination, not `blackbox:9115`. The supplied [target guide](../../docs/adding-targets.md) describes this layout. An empty HTTP-duration query is expected if there are no HTTP checks with module names starting `http_`, or all are failing. The current template includes all `http_.*` modules; other naming conventions require explicitly updating the panel selector.
+**Check:** compare current `up{job="blackbox"}` with the agreed service/check list and the target files; no metric query can find a target that was never configured. Each expected probe needs `service`, `host`, `module`, `owner`, `contact` and `dependencies`. Confirm the `module` label matches the actual `?module=` relabeling and that `instance` is the destination, not `blackbox:9115`. The supplied [target guide](../../../docs/adding-targets.md) describes this layout. An empty HTTP-duration query is expected if there are no HTTP checks with module names starting `http_`, or all are failing. The current template includes all `http_.*` modules; other naming conventions require explicitly updating the panel selector.
 
 The joins below use `job,instance,module,service,host,owner,contact,dependencies`. Run this current query; it must return no rows:
 
@@ -86,7 +89,7 @@ For dashboard backup and handover, record the owner, storage location, access co
 
 ## 3. Import the health dashboard
 
-Use [service-health-dashboard-template.json](../service-health-dashboard-template.json), which already contains the variables, queries and panel settings described below.
+Use [service-health-dashboard-template.json](../../old%20templates/service-health-dashboard-template.json), which already contains the variables, queries and panel settings described below.
 
 Before importing, keep these settings on the **Probe status history** panel. They are already present in the current template:
 
@@ -307,7 +310,7 @@ The current import template already has this query; a fresh import needs no manu
 )
 ```
 
-The template already has a visible reference line at **1 second**. Match it to the agreed threshold and verify the actual loaded `ServiceSlow` rule before claiming chart and alert alignment. The repository rule already includes `http_.*` modules; follow [the alert coverage check](../../docs/how-to-guides.md#keep-http-latency-charts-and-alerts-aligned) only when verifying or updating the deployed configuration. This is total successful probe duration, including connection and TLS work, not an application response-time histogram. Failed, missing and old probe samples leave gaps.
+The template already has a visible reference line at **1 second**. Match it to the agreed threshold and verify the actual loaded `ServiceSlow` rule before claiming chart and alert alignment. The repository rule already includes `http_.*` modules; follow [the alert coverage check](../../../docs/how-to-guides.md#keep-http-latency-charts-and-alerts-aligned) only when verifying or updating the deployed configuration. This is total successful probe duration, including connection and TLS work, not an application response-time histogram. Failed, missing and old probe samples leave gaps.
 
 For **Observed probe availability**, use an Instant query with one result per check:
 
@@ -370,7 +373,7 @@ Keep negative values visible: they indicate an expired certificate. The query ne
 
 The table displays reported certificate metrics, not every expected HTTPS target. HTTP-only checks have no certificate expiry. An expected HTTPS target missing from the table needs investigation; an empty table does not establish healthy certificates. Compare the rows with the agreed HTTPS inventory. The 3/14-day colour boundaries correspond to the existing critical/warning rule thresholds, but panel colours do not implement the rules' waiting periods or send notifications.
 
-For a homelab without HTTPS services, use the [temporary public HTTPS example](../../docs/adding-targets.md#temporary-public-https-test). If its debug output reports an IPv6 `network is unreachable` error, follow the documented IP-family setting there.
+For a homelab without HTTPS services, use the [temporary public HTTPS example](../../../docs/adding-targets.md#temporary-public-https-test). If its debug output reports an IPv6 `network is unreachable` error, follow the documented IP-family setting there.
 
 **Homelab confirmation — 16 October 2026:** the operator confirmed the manually configured certificate panel works after changing the existing `http_2xx` module to prefer IPv4. The original probe had selected an IPv6 destination with no working route. This confirms that live configuration and display; fresh import of the updated complete template, school deployment and critical-certificate notification testing remain separate checks.
 
@@ -382,7 +385,7 @@ For a homelab without HTTPS services, use the [temporary public HTTPS example](.
 
 The health template includes a full-width **Host disk SMART health** table below the certificate table. It shows **Host**, **Disk**, **SMART health** and **Exporter**, using the existing `smartctl` scrape job. **Passed** is green (`1`), **Failed** is red (`0`), and **Unknown** is gray (`-1` or no value). It displays the latest exported overall SMART assessment, not the result or completion time of a short/long self-test. The exporter reads `smart_status.passed`; see the [v0.14.0 implementation](https://github.com/prometheus-community/smartctl_exporter/blob/v0.14.0/smartctl.go) and [metric definitions](https://github.com/prometheus-community/smartctl_exporter/blob/v0.14.0/metrics.go).
 
-**Prerequisites:** the physical host must already run [smartctl_exporter](../../docs/how-to-guides.md#add-smartctl_exporter-for-drive-health), with an enabled Prometheus job named `smartctl` and a consistent, non-empty `host` label. Physical disks are not normally visible through SMART inside an LXC/VM. Adding the dashboard does not install the exporter, enable its optional scrape job or start disk tests.
+**Prerequisites:** the physical host must already run [smartctl_exporter](../../../docs/how-to-guides.md#add-smartctl_exporter-for-drive-health), with an enabled Prometheus job named `smartctl` and a consistent, non-empty `host` label. Physical disks are not normally visible through SMART inside an LXC/VM. Adding the dashboard does not install the exporter, enable its optional scrape job or start disk tests.
 
 When monitoring runs in a **Debian VM on Titan**, collect physical-drive SMART data on **Titan itself**, not on the monitoring VM's virtual disk. Run the exporter installation steps on the physical host only if its OS is supported by that guide; first check `cat /etc/os-release` and `systemctl status smartctl_exporter --no-pager` on Titan. Configure the existing Prometheus on the monitoring VM to scrape `<titan-ip>:9633`, using `host: titan` to match its service probes. For example, enable/update this job under `scrape_configs` in the actual Prometheus configuration (do not add a duplicate job):
 
@@ -465,7 +468,7 @@ The budget bars show allocation divided by the approved budget. They do not enfo
 ## 8. Import and verify the Smith dashboard
 
 1. Complete [smith-resource-metrics.md](smith-resource-metrics.md), using the existing exporter and single `pve` scrape where present. Load the reviewed inventory, budgets and recording rules before importing.
-2. Copy [smith-resources-dashboard-template.json](../smith-resources-dashboard-template.json) to a local `smith-resources-dashboard.json`.
+2. Copy [smith-resources-dashboard-template.json](../../old%20templates/smith-resources-dashboard-template.json) to a local `smith-resources-dashboard.json`.
 3. Replace the title/description/environment placeholders. Suggested title: **Smith resources and budgets**. Describe the agreed scope, CPU charging policy and reviewed disk inventory.
 4. Import using the new-dashboard procedure in step 3, choose the intended Prometheus source and keep the catalogue UID unchanged.
 5. Select `group`. Its options include reviewed inventory groups and approved budget groups. **All** keeps separate series per group instead of averaging percentages.
@@ -514,7 +517,7 @@ For an approved VM/guest exporter, replace `noc-core` with its exact `host` labe
 
 ## 10. Run the acceptance checks and collect evidence
 
-The [service-health dashboard test report](service-health-tests.md) records the completed homelab tests, Grafana observations and outcomes for Down/recovery, Unknown status, slow successful responses and HTTPS display. Notification routing and maintenance procedures remain in the [monitoring how-to guide](../../docs/how-to-guides.md).
+The [service-health dashboard test report](service-health-tests.md) records the completed homelab tests, Grafana observations and outcomes for Down/recovery, Unknown status, slow successful responses and HTTPS display. Notification routing and maintenance procedures remain in the [monitoring how-to guide](../../../docs/how-to-guides.md).
 
 For the Viewer login and permission checks, follow [Verify the operator account](service-catalogue-dashboard.md#8-verify-the-operator-account). For dashboard export and a separate-instance restore test, follow [the Grafana restore procedure](service-catalogue-dashboard.md#9-verify-dashboard-restore-on-a-separate-grafana).
 
@@ -583,4 +586,4 @@ Run from the monitoring repository root with Python 3.14 and Docker available:
 python -B grafana/test_queries.py --docker
 ```
 
-Alternatively use `--promtool /path/to/promtool` with Prometheus v3.13.3. The runner reads expressions directly from both dashboard templates and checks 11 scenarios against real Prometheus: complete targets without `group`, missing/empty metadata, per-service counting, absent inventory, healthy/down/unknown probes, stale samples and All/single-service filtering. On 20 October 2026 these scenarios passed locally; two complete services without `group` produced a missing-metadata count of 0. This does not establish import or live acceptance on the monitoring server.
+Alternatively use `--promtool /path/to/promtool` with Prometheus 3.7.3. The 13 November runner read the then-merged dashboards and checked 21 scenarios. The maintained runner now targets the final dashboards; see the [current validation record](../validation-and-acceptance.md). The original 11 scenarios covered: complete targets without `group`, missing/empty metadata, per-service counting, absent inventory, healthy/down/unknown probes, stale samples and All/single-service filtering. On 20 October 2026 these scenarios passed locally; two complete services without `group` produced a missing-metadata count of 0. This does not establish import or live acceptance on the monitoring server.

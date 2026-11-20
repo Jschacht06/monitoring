@@ -1,0 +1,2056 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Select the existing working Prometheus data source.",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "id": null,
+  "uid": null,
+  "title": "Service Health and Catalogue",
+  "description": "Service ownership, dependencies, fresh Up/Down/Unknown checks, history, availability, coverage, certificate expiry, SMART health and HTTP/TLS/DNS diagnostics. Combines the project templates with Blackbox Exporter HTTP Prober revision 1. Catalogue and disk filters are independent of probe filters.",
+  "tags": [
+    "noc",
+    "noc-monitoring",
+    "service-health"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Monitoring dashboards",
+      "tags": [
+        "noc-monitoring"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "label": "Probe job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "query_result(count by(job) (probe_success or up{job=\"blackbox\"}))",
+        "query": {
+          "query": "query_result(count by(job) (probe_success or up{job=\"blackbox\"}))",
+          "refId": "var-job"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "blackbox",
+          "value": "blackbox"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": "/job=\"([^\"]+)\"/"
+      },
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(up{job=~\"$job\",service!=\"\"}, service)",
+        "query": {
+          "query": "label_values(up{job=~\"$job\",service!=\"\"}, service)",
+          "refId": "var-service"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "instance",
+        "label": "Target",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(up{job=~\"$job\",service=~\"$service\"}, instance)",
+        "query": {
+          "query": "label_values(up{job=~\"$job\",service=~\"$service\"}, instance)",
+          "refId": "var-instance"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "disk_host",
+        "label": "Disk host",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(up{job=\"smartctl\",host!=\"\"}, host)",
+        "query": {
+          "query": "label_values(up{job=\"smartctl\",host!=\"\"}, host)",
+          "refId": "var-disk-host"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "regex": "",
+        "description": "Filters SMART health only; independent of Probe job, Service and Target."
+      },
+      {
+        "name": "probe_interval_s",
+        "type": "constant",
+        "query": "30",
+        "current": {
+          "text": "30",
+          "value": "30"
+        },
+        "options": [
+          {
+            "text": "30",
+            "value": "30",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Actual Blackbox scrape interval in seconds. Used only for coverage. Also set the status-history Min interval and the Prometheus datasource Scrape interval."
+      },
+      {
+        "name": "probe_freshness_s",
+        "type": "constant",
+        "query": "90",
+        "current": {
+          "text": "90",
+          "value": "90"
+        },
+        "options": [
+          {
+            "text": "90",
+            "value": "90",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Maximum accepted up/probe sample age in seconds, exclusive. Default90 assumes30s scrapes; choose a tolerance longer than normal scrape completion/jitter."
+      },
+      {
+        "name": "disk_freshness_s",
+        "type": "constant",
+        "query": "180",
+        "current": {
+          "text": "180",
+          "value": "180"
+        },
+        "options": [
+          {
+            "text": "180",
+            "value": "180",
+            "selected": true
+          }
+        ],
+        "hide": 2,
+        "description": "Maximum accepted smartctl status/up Prometheus sample age in seconds, exclusive. Default 180 assumes 30s scrapes; adjust for the actual smartctl job interval. Does not measure the exporter cache age."
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Visible probe checks",
+      "type": "stat",
+      "description": "Checks with a currently queryable up series, including failed scrapes. This is observed monitoring inventory, not proof of complete service coverage. Missing inventory is Unknown/No data.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"})))",
+          "refId": "A",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Failed destination checks",
+      "type": "stat",
+      "description": "Failed destination checks only with fresh probe_success and a fresh successful scrape. Zero alone does not prove every expected check is monitored or known.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count((\n  probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}\n  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1)\n  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n) == 0)\nor (0 * count(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"}))))",
+          "refId": "A",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Unknown probe checks",
+      "type": "stat",
+      "description": "Visible checks with failed scrapes, missing probe_success or samples older than probe_freshness_s (default 90s for 30s scrapes). Missing inventory gives Unknown/No data, not 0.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(((\n  probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}\n  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1)\n  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n)\nor on(job,instance,module,service,host,owner,contact,dependencies)\n(-1 + 0 * (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"}))))) == -1)\nor (0 * count(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"}))))",
+          "refId": "A",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Current probe checks",
+      "type": "table",
+      "description": "One row per visible probe:1 passed,0 failed,-1 unknown. Known states require successful fresh up and fresh probe_success samples (default<90s). Removed targets eventually disappear; compare with agreed inventory.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 11
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}\n  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1)\n  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n)\nor on(job,instance,module,service,host,owner,contact,dependencies)\n(-1 + 0 * (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"}))))",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Down",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "Up",
+                        "color": "green"
+                      },
+                      "-1": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true
+            },
+            "indexByName": {
+              "service": 0,
+              "host": 1,
+              "module": 2,
+              "instance": 3,
+              "owner": 4,
+              "contact": 5,
+              "dependencies": 6,
+              "Value": 7
+            },
+            "renameByName": {
+              "service": "Service",
+              "host": "Host",
+              "module": "Check",
+              "instance": "Target",
+              "owner": "Owner",
+              "contact": "Contact",
+              "dependencies": "Dependencies",
+              "Value": "Status"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Probe status history",
+      "type": "status-history",
+      "description": "Sampled probe status at each query step: Up green, Down red, Unknown gray. Freshness is evaluated at each step. Max data points 200 and Min interval 30s coarsen long periods and can miss brief failures. Gaps are not filled.",
+      "maxDataPoints": 200,
+      "interval": "30s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}\n  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1)\n  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n)\nor on(job,instance,module,service,host,owner,contact,dependencies)\n(-1 + 0 * (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"}))))",
+          "refId": "A",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Down",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green"
+                },
+                "-1": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 100
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "auto",
+        "rowHeight": 0.8,
+        "colWidth": 0.9,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Successful HTTP probe duration",
+      "type": "timeseries",
+      "description": "Total successful HTTP probe duration in seconds for modules named http_*. Filtered to fresh successful scrapes/probes. Includes connection/TLS work; failures create gaps. The 1s reference line must be checked against the agreed threshold and loaded ServiceSlow rule.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  probe_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\",module=~\"http_.*\"}\n  and on(job,instance,module,service,host,owner,contact,dependencies) (probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\",module=~\"http_.*\"} == 1)\n  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1)\n  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\",module=~\"http_.*\"}) < $probe_freshness_s)\n  and on(job,instance,module,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\",module=~\"http_.*\"}) < $probe_freshness_s)\n)",
+          "refId": "A",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Observed probe availability",
+      "type": "stat",
+      "description": "Percentage of recorded probe_success samples that succeeded over the selected period. Missing samples are excluded; visible checks without samples map to Unknown. Historical series can remain after removal. Read with coverage; this is not a service SLO.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(100 * avg_over_time(probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}[$__range]))\nor on(job,instance,module,service,host,owner,contact,dependencies) (-1 + 0 * (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"}))))",
+          "refId": "A",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "title": "Probe sample coverage",
+      "type": "stat",
+      "description": "Approximate recorded probe_success samples / expected samples, using probe_interval_s (default 30). Visible checks with no samples in the period show 0. New targets, label changes, monitoring outages and retention reduce coverage; historical removed targets can remain.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "clamp_max(\n  100 * count_over_time(probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}[$__range]) / ($__range_s / $probe_interval_s),\n  100\n)\nor on(job,instance,module,service,host,owner,contact,dependencies) (0 * (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"}))))",
+          "refId": "A",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Unknown",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Unknown",
+                  "color": "#808080"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "title": "HTTPS certificate days remaining",
+      "type": "table",
+      "description": "Days until the earliest certificate expiry reported by each selected Blackbox probe. Requires a fresh successful scrape and fresh positive expiry metric, not probe_success=1. HTTP-only targets are not applicable. Missing data for an expected HTTPS check requires investigation; compare with the agreed HTTPS inventory. Negative days indicate expiry. Colours: below 3 red, 3 to below 14 orange, 14 or more green.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  (probe_ssl_earliest_cert_expiry{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} - time()) / 86400\n)\nand on(job,instance,module,service,host,owner,contact,dependencies)\n(probe_ssl_earliest_cert_expiry{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} > 0)\nand on(job,instance,module,service,host,owner,contact,dependencies)\n(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1)\nand on(job,instance,module,service,host,owner,contact,dependencies)\n(time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\nand on(job,instance,module,service,host,owner,contact,dependencies)\n(time() - timestamp(probe_ssl_earliest_cert_expiry{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Days remaining"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "d"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "noValue",
+                "value": "Unknown"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    },
+                    {
+                      "color": "green",
+                      "value": 14
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Days remaining",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "contact": true,
+              "dependencies": true
+            },
+            "indexByName": {
+              "service": 0,
+              "host": 1,
+              "module": 2,
+              "instance": 3,
+              "Value": 4
+            },
+            "renameByName": {
+              "service": "Service",
+              "host": "Host",
+              "module": "Check",
+              "instance": "Target",
+              "Value": "Days remaining"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Host disk SMART health",
+      "description": "Latest exported overall SMART health: Passed (1), Failed (0), or Unknown when the status is missing, invalid, stale or the exporter scrape failed. Known disks stay visible as Unknown for up to 24h after their last device/status sample. Disk host filters this table independently of the Probe job/Service/Target filters. This is the overall SMART assessment, not a short/long self-test result or its timestamp. Freshness checks apply to Prometheus samples; exporter polling/cache health must be checked separately.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "max by (host, instance, device) (\n  (smartctl_device_smart_status{job=\"smartctl\",host=~\"$disk_host\"} == 0 or smartctl_device_smart_status{job=\"smartctl\",host=~\"$disk_host\"} == 1)\n  and on(job, instance) (up{job=\"smartctl\",host=~\"$disk_host\"} == 1)\n  and on(job, instance) (time() - timestamp(up{job=\"smartctl\",host=~\"$disk_host\"}) < $disk_freshness_s)\n  and (time() - timestamp(smartctl_device_smart_status{job=\"smartctl\",host=~\"$disk_host\"}) < $disk_freshness_s)\n)\nor on(host, instance, device)\n(\n  -1 + 0 * max by (host, instance, device) (\n    last_over_time(smartctl_device{job=\"smartctl\",host=~\"$disk_host\"}[24h])\n    or last_over_time(smartctl_device_smart_status{job=\"smartctl\",host=~\"$disk_host\"}[24h])\n  )\n)",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SMART health"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Failed",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "Passed",
+                        "color": "green"
+                      },
+                      "-1": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "noValue",
+                "value": "Unknown"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#808080",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 0
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "SMART health",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            },
+            "indexByName": {
+              "host": 0,
+              "device": 1,
+              "Value": 2,
+              "instance": 3
+            },
+            "renameByName": {
+              "host": "Host",
+              "device": "Disk",
+              "Value": "SMART health",
+              "instance": "Exporter"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Service catalogue — all monitored targets",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 24,
+        "h": 1
+      },
+      "id": 11
+    },
+    {
+      "id": 12,
+      "title": "Every monitored service",
+      "description": "Current discovered scrape inventory from up, including failing scrapes. One row per service/host requires complete identity and identical owner/contact/dependencies across checks. Newly discovered targets need a first scrape; removed targets disappear after staleness processing. API exporter rows are collection checks, not guest inventories.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count by (service, host, owner, contact, dependencies) (up)",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Group",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "service": 0,
+              "host": 1,
+              "owner": 2,
+              "contact": 3,
+              "dependencies": 4,
+              "Value": 5
+            },
+            "renameByName": {
+              "service": "Service",
+              "host": "Host",
+              "owner": "Owner",
+              "contact": "Contact person",
+              "dependencies": "Dependencies",
+              "Value": "Checks"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Services with incomplete catalogue metadata",
+      "description": "Distinct service/host tuples with at least one check missing a required catalogue label. Missing identity labels can merge unrelated checks and undercount services: inspect job/instance/module in Explore. Zero only checks label presence on current up series; placeholders, bad metadata and undiscovered services need manual review. No data or an error requires investigation.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 69,
+        "w": 24,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(count by (service, host) (up{service=\"\"} or up{host=\"\"} or up{owner=\"\"} or up{contact=\"\"} or up{dependencies=\"\"})) or (0 * count(up))",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "none",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Services missing catalogue metadata",
+      "description": "Current up series missing service, host, owner, contact or dependencies, grouped by service/host. Missing identity labels can merge unrelated checks: inspect job/instance/module in Explore. Checks missing metadata counts incomplete checks, including failing scrapes. Empty/No data is expected only when the top inventory has data and the metadata counter is zero.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count by (service, host) (up{service=\"\"} or up{host=\"\"} or up{owner=\"\"} or up{contact=\"\"} or up{dependencies=\"\"})",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Group",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "service": 0,
+              "host": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "service": "Service",
+              "host": "Host",
+              "Value": "Checks missing metadata"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "HTTP, TLS and DNS diagnostics",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 81,
+        "w": 24,
+        "h": 1
+      },
+      "id": 15
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Current state plus HTTP status, SSL use, certificate days, TLS version and one-minute mean total/DNS duration. Rows join on the full check identity, not just the destination. Status includes TCP checks; HTTP-only fields can be empty. Diagnostic values require fresh samples and a fresh successful scrape; unavailable values are Unknown.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unknown",
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Down",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "Up",
+                        "color": "green"
+                      },
+                      "-1": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "Unknown",
+                        "color": "#808080"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SSL"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "NO",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "OK",
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SSL Cert Expiry (days)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "d"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    },
+                    {
+                      "color": "green",
+                      "value": 14
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Code"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 200
+                    },
+                    {
+                      "color": "orange",
+                      "value": 300
+                    },
+                    {
+                      "color": "red",
+                      "value": 400
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Probe Duration (s)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.8
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DNS Lookup Duration (s)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.1
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.2
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Target"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open target",
+                    "url": "${__data.fields.Target}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 82,
+        "w": 24,
+        "h": 11
+      },
+      "id": 16,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "SSL Cert Expiry (days)"
+          }
+        ]
+      },
+      "pluginVersion": "7.3.5",
+      "repeat": null,
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "label_join(((\n  probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}\n  and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1)\n  and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n  and on(job,instance,module,service,host,owner,contact,dependencies)\n  (time() - timestamp(probe_success{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\n)\nor on(job,instance,module,service,host,owner,contact,dependencies)\n(-1 + 0 * (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job) (count by(job) (probe_success) or count by(job) (up{job=\"blackbox\"}))))), \"check_key\", \" | \", \"job\", \"instance\", \"module\", \"service\", \"host\", \"owner\", \"contact\", \"dependencies\")",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "max by(check_key) (label_join(((probe_http_ssl{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1) and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s) and (time() - timestamp(probe_http_ssl{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s))), \"check_key\", \" | \", \"job\", \"instance\", \"module\", \"service\", \"host\", \"owner\", \"contact\", \"dependencies\"))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "max by(check_key) (label_join(((\n  (probe_ssl_earliest_cert_expiry{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} - time()) / 86400\n)\nand on(job,instance,module,service,host,owner,contact,dependencies)\n(probe_ssl_earliest_cert_expiry{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} > 0)\nand on(job,instance,module,service,host,owner,contact,dependencies)\n(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1)\nand on(job,instance,module,service,host,owner,contact,dependencies)\n(time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)\nand on(job,instance,module,service,host,owner,contact,dependencies)\n(time() - timestamp(probe_ssl_earliest_cert_expiry{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)), \"check_key\", \" | \", \"job\", \"instance\", \"module\", \"service\", \"host\", \"owner\", \"contact\", \"dependencies\"))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "D",
+          "expr": "max by(check_key) (label_join(((probe_http_status_code{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1) and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s) and (time() - timestamp(probe_http_status_code{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)) > 0), \"check_key\", \" | \", \"job\", \"instance\", \"module\", \"service\", \"host\", \"owner\", \"contact\", \"dependencies\"))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "E",
+          "expr": "max by(check_key) (label_join((avg_over_time(probe_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}[1m]) and (probe_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1) and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s) and (time() - timestamp(probe_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s))), \"check_key\", \" | \", \"job\", \"instance\", \"module\", \"service\", \"host\", \"owner\", \"contact\", \"dependencies\"))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "F",
+          "expr": "max by(check_key,version) (label_join(((probe_tls_version_info{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1) and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s) and (time() - timestamp(probe_tls_version_info{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s))), \"check_key\", \" | \", \"job\", \"instance\", \"module\", \"service\", \"host\", \"owner\", \"contact\", \"dependencies\"))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "G",
+          "expr": "max by(check_key) (label_join((avg_over_time(probe_dns_lookup_time_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}[1m]) and (probe_dns_lookup_time_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1) and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s) and (time() - timestamp(probe_dns_lookup_time_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s))), \"check_key\", \" | \", \"job\", \"instance\", \"module\", \"service\", \"host\", \"owner\", \"contact\", \"dependencies\"))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "HTTP Probe Overview",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "check_key",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "check_key": true,
+              "Value #F": true,
+              "__name__": true,
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "Time 7": true,
+              "Time 8": true
+            },
+            "indexByName": {
+              "service": 0,
+              "host": 1,
+              "module": 2,
+              "instance": 3,
+              "Value #A": 4,
+              "Value #D": 5,
+              "Value #B": 6,
+              "version": 7,
+              "Value #C": 8,
+              "Value #E": 9,
+              "Value #G": 10,
+              "owner": 11,
+              "contact": 12,
+              "dependencies": 13
+            },
+            "renameByName": {
+              "service": "Service",
+              "host": "Host",
+              "module": "Check",
+              "instance": "Target",
+              "owner": "Owner",
+              "contact": "Contact",
+              "dependencies": "Dependencies",
+              "Value #A": "Status",
+              "Value #B": "SSL",
+              "Value #C": "SSL Cert Expiry (days)",
+              "Value #D": "Code",
+              "Value #E": "Probe Duration (s)",
+              "version": "TLS Version",
+              "Value #G": "DNS Lookup Duration (s)"
+            }
+          }
+        }
+      ],
+      "transparent": true,
+      "type": "table"
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Probe Duration",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 93,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(job,instance,module,service) ((probe_http_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1) and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s) and (time() - timestamp(probe_http_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s)))",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{service}} / {{instance}} / {{module}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "min",
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Sum of HTTP request phase durations over redirects, per check identity; includes partially completed failed probes. Compare with Successful HTTP probe duration for passed checks.",
+      "id": 17
+    },
+    {
+      "type": "row",
+      "title": "HTTP phases — $instance",
+      "collapsed": true,
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "HTTP Probe Phases Duration",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 102,
+            "w": 24,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(probe_http_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} and on(job,instance,module,service,host,owner,contact,dependencies) (up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"} == 1) and on(job,instance,module,service,host,owner,contact,dependencies) (time() - timestamp(up{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s) and (time() - timestamp(probe_http_duration_seconds{job=~\"$job\",instance=~\"$instance\",service=~\"$service\"}) < $probe_freshness_s))",
+              "instant": false,
+              "range": true,
+              "format": "time_series",
+              "legendFormat": "{{service}} / {{instance}} / {{module}} / {{phase}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 80,
+                "spanNulls": false,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "Duration of each HTTP request phase, summed over redirects and stacked as in the supplied dashboard. Each repeated row selects one destination; use the legend to distinguish modules if that destination has multiple checks.",
+          "id": 19
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 101,
+        "w": 24,
+        "h": 1
+      },
+      "repeat": "instance",
+      "id": 18
+    }
+  ]
+}

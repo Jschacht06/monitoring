@@ -1,8 +1,10 @@
 # Smith resource metrics and approved budgets
 
+> Archived procedure. The final scope confirmed on 20 November 2026 is [Host Systems and Disk Health plus Proxmox VM and LXC Monitoring](../../README.md). The service-check, group-budget and October test material below concerns earlier dashboards and is not required for the final pair.
+
 This guide supplies the data for [the health and usage dashboards](health-and-usage-dashboards.md#7-prepare-smith-resource-metrics). It reads the Proxmox API from noc-core, without installing software on Smith, and records which guests belong to each group and what budget was approved.
 
-**Status: the resource dashboard extension is proposed and has not been verified on the deployment.** The supplied [monitoring setup](../../docs/setup.md) and [PVE how-to](../../docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter) describe an existing `pve-exporter` service, image `3.10.1`, private configuration `pve/pve.yml`, an optional `pve` job and guest-status alerts. These supporting guides were supplied as context; their deployment claims are not evidence that a particular recipient has those services running. Inspect local configuration first. Reuse a working exporter/job/secret and preserve collectors used by existing alerts. Steps 3–5 include a fallback for a deployment without PVE monitoring. Complete the resource checks on a home/test setup, then repeat within the approved school scope.
+**Status: the resource dashboard extension is proposed and has not been verified on the deployment.** The supplied [monitoring setup](../../../docs/setup.md) and [PVE how-to](../../../docs/how-to-guides.md#monitor-proxmox-guests-with-pve-exporter) describe an existing `pve-exporter` service, image `3.10.1`, private configuration `pve/pve.yml`, an optional `pve` job and guest-status alerts. These supporting guides were supplied as context; their deployment claims are not evidence that a particular recipient has those services running. Inspect local configuration first. Reuse a working exporter/job/secret and preserve collectors used by existing alerts. Steps 3–5 include a fallback for a deployment without PVE monitoring. Complete the resource checks on a home/test setup, then repeat within the approved school scope.
 
 This guide assumes Linux with Docker Engine and the Compose v2 plugin, a working Prometheus/Grafana stack at `/opt/monitoring`, and one Proxmox cluster. Confirm that Compose mounts `./prometheus` at `/etc/prometheus` and Prometheus has `rule_files: ['/etc/prometheus/rules/*.yml']`. The rules template in `grafana/docs/` has no effect until its filled local copy is loaded. A successful syntax check cannot confirm API permissions, actual guest coverage or Grafana rendering.
 
@@ -287,7 +289,7 @@ This should return no rows. One guest must have one current identity series. The
 Copy the supplied template **once**, then edit your local copy:
 
 ```bash
-cp grafana/docs/smith-resource-rules-template.yml prometheus/rules/smith-resources.yml
+cp grafana/docs/archive/smith-resource-rules-template.yml prometheus/rules/smith-resources.yml
 nano prometheus/rules/smith-resources.yml
 ```
 

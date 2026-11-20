@@ -687,7 +687,7 @@ The exporter/monitoring image tags select the tested release versions. The statu
       - grafana_data:/var/lib/grafana
 ```
 
-`grafana_data` holds users, the admin password, data sources and dashboards. Automatic file provisioning is still planned. Manual-import templates are available for the [catalogue](../grafana/docs/service-catalogue-dashboard.md) and [health/resource dashboards](../grafana/docs/health-and-usage-dashboards.md); export saved UI changes separately, because Grafana does not update those template files.
+`grafana_data` holds users, the admin password, data sources and dashboards. Automatic file provisioning is still planned. Manual-import templates are available for the [catalogue](../grafana/docs/archive/service-catalogue-dashboard.md) and [health/resource dashboards](../grafana/docs/archive/health-and-usage-dashboards.md); export saved UI changes separately, because Grafana does not update those template files.
 
 ### blackbox
 

@@ -1,5 +1,7 @@
 # Service-health dashboard test report
 
+> Archived procedure. The final scope confirmed on 20 November 2026 is [Host Systems and Disk Health plus Proxmox VM and LXC Monitoring](../../README.md). The service-check, group-budget and October test material below concerns earlier dashboards and is not required for the final pair.
+
 **Date:** 16 October 2026. **Environment:** homelab, using Crafty and temporary probe targets. The tests checked how Grafana displayed destination failures, monitoring failures and slow successful responses. Smith resource dashboards were outside this test scope.
 
 ## How the dashboard was checked
@@ -38,7 +40,7 @@ A separate temporary HTTP endpoint ran inside Crafty's guest, leaving the real C
 
 A public HTTPS target initially failed because the probe selected an IPv6 address without a working network route. The existing http_2xx module was changed to prefer IPv4. The operator then confirmed successful probing and a working **HTTPS certificate days remaining** panel.
 
-**Outcome:** operator-confirmed. The incident and configuration fix are documented with the [certificate panel](health-and-usage-dashboards.md#https-certificate-expiry) and [target configuration](../../docs/adding-targets.md).
+**Outcome:** operator-confirmed. The incident and configuration fix are documented with the [certificate panel](health-and-usage-dashboards.md#https-certificate-expiry) and [target configuration](../../../docs/adding-targets.md).
 
 ## Operator-account verification
 
@@ -102,7 +104,7 @@ Reviewed on 20 October 2026 against [Project 4 — Network Operations Center](ht
 | Four usable alerts: outage, degradation, capacity and backup/check failure | ServiceDown, ServiceSlow, DiskSpaceLow and MonitoringCheckFailed exist with severity and runbook annotations; README records earlier capacity tests; current session confirmed outage/slow/check-failure delivery | Reconcile the loaded alert matrix and approved thresholds with the stack owner; keep that team's test evidence, without requiring duplicate notification work here |
 | Severity, deduplication, quiet maintenance and escalation | Stack configuration/documentation covers routing/grouping/escalation; operator states maintenance works and declined a repeat | Retain the stack owner's maintenance/escalation records and an agreed school maintenance window; no new maintenance evidence claimed here |
 | Central/federated log trial for at least two services, retention and access control | Main README lists logging as planned; no such implementation/test was found in the reviewed monitoring repo | Team deliverable; confirm any separate work and its retention/access evidence |
-| Status page without internal details or sensitive metadata | Separate sanitized component installed in the homelab; three Up rows confirmed by operator and screenshot | Complete live failure/recovery and external disclosure checks using the [status-page guide](../../docs/public-status-page.md); keep detailed Grafana private |
+| Status page without internal details or sensitive metadata | Separate sanitized component installed in the homelab; three Up rows confirmed by operator and screenshot | Complete live failure/recovery and external disclosure checks using the [status-page guide](../../../docs/public-status-page.md); keep detailed Grafana private |
 | At least two simulated incidents from detection through post-mortem | Crafty outage and controlled slow response provide two technical scenarios | Incident timelines, impact, response and post-mortems; a two-project-group game day is not established by these homelab tests |
 | Backup/restore of configuration, dashboards and catalogue | Dashboard-only export/restore operator-confirmed in approximately 10 minutes; configuration backup procedure documented | Restore actual configuration/target catalogue and rules on a test instance; record outcome, duration, data loss and evidence. A Git clone contains templates, not the ignored real targets/secrets |
 
@@ -125,4 +127,4 @@ The Should items are distinct from the completed dashboard scope: per-service SL
 
 ## Public status-page implementation update — 20 October 2026
 
-A separate [public status component](../../docs/public-status-page.md) now implements the sanitized page requirement: approved aliases plus Up/Down, with the source connection and check identities retained server-side. Local automated verification covers status aggregation, failures/recovery, cache expiry and the HTTP privacy boundary. The existing Grafana tests above do not establish live acceptance for this new component. The operator subsequently confirmed a working homelab installation with a screenshot of Jellyfin, Scrutiny and Uptime Kuma in three separate Up rows; a private terminal check also confirmed successful source querying. The [live baseline and configuration repair](../../docs/public-status-page.md#live-baseline-and-configuration-repair--20-october-2026) are recorded in the status guide. Controlled live failures, API/source disclosure inspection and the approved public HTTPS route remain pending; the whole teacher requirement must not yet be marked verified.
+A separate [public status component](../../../docs/public-status-page.md) now implements the sanitized page requirement: approved aliases plus Up/Down, with the source connection and check identities retained server-side. Local automated verification covers status aggregation, failures/recovery, cache expiry and the HTTP privacy boundary. The existing Grafana tests above do not establish live acceptance for this new component. The operator subsequently confirmed a working homelab installation with a screenshot of Jellyfin, Scrutiny and Uptime Kuma in three separate Up rows; a private terminal check also confirmed successful source querying. The [live baseline and configuration repair](../../../docs/public-status-page.md#live-baseline-and-configuration-repair--20-october-2026) are recorded in the status guide. Controlled live failures, API/source disclosure inspection and the approved public HTTPS route remain pending; the whole teacher requirement must not yet be marked verified.
